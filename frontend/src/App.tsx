@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import MaestrosPage from "./pages/MaestrosPage";
@@ -13,6 +13,7 @@ import ConfiguracionPage from "./pages/ConfiguracionPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+const isAuthenticated = () => localStorage.getItem("cch_auth") === "1";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -21,13 +22,13 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/maestros" element={<MaestrosPage />} />
-          <Route path="/ninos" element={<NinosPage />} />
-          <Route path="/asistencia" element={<AsistenciaPage />} />
-          <Route path="/reportes" element={<ReportesPage />} />
-          <Route path="/configuracion" element={<ConfiguracionPage />} />
+          <Route path="/login" element={isAuthenticated() ? <Navigate to="/" replace /> : <LoginPage />} />
+          <Route path="/" element={isAuthenticated() ? <DashboardPage /> : <Navigate to="/login" replace />} />
+          <Route path="/maestros" element={isAuthenticated() ? <MaestrosPage /> : <Navigate to="/login" replace />} />
+          <Route path="/ninos" element={isAuthenticated() ? <NinosPage /> : <Navigate to="/login" replace />} />
+          <Route path="/asistencia" element={isAuthenticated() ? <AsistenciaPage /> : <Navigate to="/login" replace />} />
+          <Route path="/reportes" element={isAuthenticated() ? <ReportesPage /> : <Navigate to="/login" replace />} />
+          <Route path="/configuracion" element={isAuthenticated() ? <ConfiguracionPage /> : <Navigate to="/login" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

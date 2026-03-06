@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
@@ -22,6 +22,12 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('cch_auth');
+    navigate('/login');
+  };
 
   return (
     <aside className="hidden lg:flex flex-col w-64 min-h-screen sidebar-gradient border-r border-sidebar-border">
@@ -68,7 +74,11 @@ export function AppSidebar() {
             <p className="text-sm font-medium text-sidebar-foreground truncate">Admin</p>
             <p className="text-xs text-sidebar-muted">Administrador</p>
           </div>
-          <button className="text-sidebar-muted hover:text-sidebar-foreground transition-colors">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="text-sidebar-muted hover:text-sidebar-foreground transition-colors"
+          >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
