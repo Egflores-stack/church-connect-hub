@@ -1,85 +1,131 @@
-import { useState } from 'react';
-import { Plus, Search, Pencil, Trash2, User } from 'lucide-react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { PageHeader } from '@/components/shared/PageHeader';
-import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { mockNinos } from '@/data/mock';
-import { Nino, Turno, Estado } from '@/types';
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Search, Pencil, Trash2, User } from "lucide-react";
+import { toast } from "sonner";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { createNino, deleteNino, getNinos, updateNino } from "@/lib/api";
+import type { Estado, Nino, Turno } from "@/types";
+
+const emptyForm = {
+  nombre: "",
+  fechaNacimiento: "",
+  grupo: "4-6",
+  turno: "manana" as Turno,
+  responsable: "",
+  telefonoResponsable: "",
+  estado: "activo" as Estado,
+};
 
 export default function NinosPage() {
-  const [ninos, setNinos] = useState<Nino[]>(mockNinos);
-  const [search, setSearch] = useState('');
-  const [filterTurno, setFilterTurno] = useState('todos');
-  const [filterGrupo, setFilterGrupo] = useState('todos');
+  const [ninos, setNinos] = useState<Nino[]>([]);
+  const [search, setSearch] = useState("");
+  const [filterTurno, setFilterTurno] = useState("todos");
+  const [filterGrupo, setFilterGrupo] = useState("todos");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingNino, setEditingNino] = useState<Nino | null>(null);
+  const [form, setForm] = useState(emptyForm);
 
-  const [form, setForm] = useState<{ nombre: string; edad: number; fechaNacimiento: string; grupo: string; turno: Turno; estado: Estado; responsable: string }>({
-    nombre: '', edad: 0, fechaNacimiento: '', grupo: 'A', turno: 'mañana', responsable: '', estado: 'activo',
-  });
+  useEffect(() => {
+    loadNinos();
+  }, []);
 
-  const filtered = ninos.filter(n => {
-    const matchSearch = n.nombre.toLowerCase().includes(search.toLowerCase());
-    const matchTurno = filterTurno === 'todos' || n.turno === filterTurno;
-    const matchGrupo = filterGrupo === 'todos' || n.grupo === filterGrupo;
-    return matchSearch && matchTurno && matchGrupo;
-  });
-
-  const grupos = [...new Set(ninos.map(n => n.grupo))].sort();
-
-  const openCreate = () => {
-    setEditingNino(null);
-    setForm({ nombre: '', edad: 0, fechaNacimiento: '', grupo: 'A', turno: 'mañana', responsable: '', estado: 'activo' });
-    setDialogOpen(true);
-  };
-
-  const openEdit = (n: Nino) => {
-    setEditingNino(n);
-    setForm({ nombre: n.nombre, edad: n.edad, fechaNacimiento: n.fechaNacimiento, grupo: n.grupo, turno: n.turno, responsable: n.responsable || '', estado: n.estado });
-    setDialogOpen(true);
-  };
-
-  const handleSave = () => {
-    if (editingNino) {
-      setNinos(prev => prev.map(n => n.id === editingNino.id ? { ...n, ...form } : n));
-    } else {
-      setNinos(prev => [...prev, { ...form, id: Date.now().toString() }]);
+  async function loadNinos() {
+    try {
+      setNinos(await getNinos());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudieron cargar los ninos.");
     }
-    setDialogOpen(false);
-  };
+  }
 
-  const handleDelete = (id: string) => {
-    setNinos(prev => prev.filter(n => n.id !== id));
-  };
+  const filtered = useMemo(
+    () =>
+      ninos.filter((nino) => {
+        const matchSearch = nino.nombre.toLowerCase().includes(search.toLowerCase());
+        const matchTurno = filterTurno === "todos" || nino.turno === filterTurno;
+        const matchGrupo = filterGrupo === "todos" || nino.grupo === filterGrupo;
+        return matchSearch && matchTurno && matchGrupo;
+      }),
+    [ninos, search, filterTurno, filterGrupo],
+  );
+
+  const grupos = [...new Set(ninos.map((nino) => nino.grupo))].sort();
+
+  function openCreate() {
+    setEditingNino(null);
+    setForm(emptyForm);
+    setDialogOpen(true);
+  }
+
+  function openEdit(nino: Nino) {
+    setEditingNino(nino);
+    setForm({
+      nombre: nino.nombre,
+      fechaNacimiento: nino.fechaNacimiento,
+      grupo: nino.grupo,
+      turno: nino.turno,
+      responsable: nino.responsable || "",
+      telefonoResponsable: nino.telefonoResponsable || "",
+      estado: nino.estado,
+    });
+    setDialogOpen(true);
+  }
+
+  async function handleSave() {
+    try {
+      if (editingNino) {
+        const updated = await updateNino(editingNino.id, form);
+        setNinos((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        toast.success("Nino actualizado.");
+      } else {
+        const created = await createNino(form);
+        setNinos((current) => [created, ...current]);
+        toast.success("Nino registrado.");
+      }
+
+      setDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar el nino.");
+    }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      await deleteNino(id);
+      setNinos((current) => current.filter((nino) => nino.id !== id));
+      toast.success("Nino eliminado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo eliminar el nino.");
+    }
+  }
 
   return (
     <AppLayout>
       <PageHeader
-        title="Niños"
-        description="Registro de niños del ministerio infantil"
+        title="Ninos"
+        description="Registro de ninos del ministerio infantil"
         actions={
           <Button onClick={openCreate} className="gap-2">
-            <Plus className="w-4 h-4" /> Nuevo Niño
+            <Plus className="h-4 w-4" /> Nuevo Nino
           </Button>
         }
       />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar niño..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Buscar nino..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={filterTurno} onValueChange={setFilterTurno}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Turno" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="mañana">Mañana</SelectItem>
+            <SelectItem value="manana">Manana</SelectItem>
             <SelectItem value="tarde">Tarde</SelectItem>
           </SelectContent>
         </Select>
@@ -87,49 +133,50 @@ export default function NinosPage() {
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Grupo" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            {grupos.map(g => <SelectItem key={g} value={g}>Grupo {g}</SelectItem>)}
+            {grupos.map((grupo) => (
+              <SelectItem key={grupo} value={grupo}>Grupo {grupo}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden animate-fade-in">
+      <div className="overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm animate-fade-in">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-muted/50 border-b border-border/50">
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nombre</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Edad</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Grupo</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Turno</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Responsable</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estado</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Acciones</th>
+              <tr className="border-b border-border/50 bg-muted/50">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nombre</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Edad</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Grupo</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Turno</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground lg:table-cell">Responsable</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estado</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((n) => (
-                <tr key={n.id} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
+              {filtered.map((nino) => (
+                <tr key={nino.id} className="border-b border-border/30 transition-colors hover:bg-muted/30">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-primary">{n.nombre.charAt(0)}</span>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                        <span className="text-xs font-bold text-primary">{nino.nombre.charAt(0)}</span>
                       </div>
-                      <span className="text-sm font-medium text-foreground">{n.nombre}</span>
+                      <span className="text-sm font-medium text-foreground">{nino.nombre}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{n.edad} años</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">Grupo {n.grupo}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground capitalize hidden md:table-cell">{n.turno}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">{n.responsable || '—'}</td>
-                  <td className="px-4 py-3"><StatusBadge status={n.estado} /></td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{nino.edad} anos</td>
+                  <td className="hidden px-4 py-3 text-sm text-muted-foreground md:table-cell">Grupo {nino.grupo}</td>
+                  <td className="hidden px-4 py-3 text-sm capitalize text-muted-foreground md:table-cell">{nino.turno}</td>
+                  <td className="hidden px-4 py-3 text-sm text-muted-foreground lg:table-cell">{nino.responsable || "-"}</td>
+                  <td className="px-4 py-3"><StatusBadge status={nino.estado} /></td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(n)}>
-                        <Pencil className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(nino)}>
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(n.id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(nino.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </td>
@@ -139,18 +186,17 @@ export default function NinosPage() {
           </table>
         </div>
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No se encontraron niños</p>
+          <div className="py-12 text-center text-muted-foreground">
+            <User className="mx-auto mb-2 h-8 w-8 opacity-50" />
+            <p className="text-sm">No se encontraron ninos</p>
           </div>
         )}
       </div>
 
-      {/* Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-display">{editingNino ? 'Editar Niño' : 'Nuevo Niño'}</DialogTitle>
+            <DialogTitle className="font-display">{editingNino ? "Editar Nino" : "Nuevo Nino"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -163,49 +209,49 @@ export default function NinosPage() {
                 <Input type="date" value={form.fechaNacimiento} onChange={(e) => setForm({ ...form, fechaNacimiento: e.target.value })} />
               </div>
               <div className="space-y-2">
-                <Label>Edad</Label>
-                <Input type="number" value={form.edad} onChange={(e) => setForm({ ...form, edad: parseInt(e.target.value) || 0 })} />
+                <Label>Grupo</Label>
+                <Select value={form.grupo} onValueChange={(value) => setForm({ ...form, grupo: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="4-6">4-6 anos</SelectItem>
+                    <SelectItem value="7-9">7-9 anos</SelectItem>
+                    <SelectItem value="10-12">10-12 anos</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Grupo</Label>
-                <Select value={form.grupo} onValueChange={(v) => setForm({ ...form, grupo: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="A">Grupo A</SelectItem>
-                    <SelectItem value="B">Grupo B</SelectItem>
-                    <SelectItem value="C">Grupo C</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label>Turno</Label>
-                <Select value={form.turno} onValueChange={(v) => setForm({ ...form, turno: v as 'mañana' | 'tarde' })}>
+                <Select value={form.turno} onValueChange={(value) => setForm({ ...form, turno: value as Turno })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="mañana">Mañana</SelectItem>
+                    <SelectItem value="manana">Manana</SelectItem>
                     <SelectItem value="tarde">Tarde</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Estado</Label>
+                <Select value={form.estado} onValueChange={(value) => setForm({ ...form, estado: value as Estado })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="activo">Activo</SelectItem>
+                    <SelectItem value="inactivo">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Responsable (opcional)</Label>
+              <Label>Responsable</Label>
               <Input value={form.responsable} onChange={(e) => setForm({ ...form, responsable: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Estado</Label>
-              <Select value={form.estado} onValueChange={(v) => setForm({ ...form, estado: v as 'activo' | 'inactivo' })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="activo">Activo</SelectItem>
-                  <SelectItem value="inactivo">Inactivo</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Telefono del responsable</Label>
+              <Input value={form.telefonoResponsable} onChange={(e) => setForm({ ...form, telefonoResponsable: e.target.value })} />
             </div>
             <Button onClick={handleSave} className="w-full">
-              {editingNino ? 'Guardar Cambios' : 'Registrar Niño'}
+              {editingNino ? "Guardar Cambios" : "Registrar Nino"}
             </Button>
           </div>
         </DialogContent>

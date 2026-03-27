@@ -1,128 +1,177 @@
-import { useState } from 'react';
-import { Plus, Search, Pencil, Trash2, Phone, Mail } from 'lucide-react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { PageHeader } from '@/components/shared/PageHeader';
-import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { mockMaestros } from '@/data/mock';
-import type { Turno, Estado } from '@/types';
-import { Maestro } from '@/types';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Search, Pencil, Trash2, Phone, Mail } from "lucide-react";
+import { toast } from "sonner";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { createMaestro, deleteMaestro, getMaestros, updateMaestro } from "@/lib/api";
+import type { Estado, Maestro, Turno } from "@/types";
+
+const emptyForm: Omit<Maestro, "id"> = {
+  nombre: "",
+  telefono: "",
+  email: "",
+  fechaCumpleanos: "",
+  grupo: "4-6",
+  turno: "manana",
+  estado: "activo",
+};
 
 export default function MaestrosPage() {
-  const [maestros, setMaestros] = useState<Maestro[]>(mockMaestros);
-  const [search, setSearch] = useState('');
+  const [maestros, setMaestros] = useState<Maestro[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMaestro, setEditingMaestro] = useState<Maestro | null>(null);
+  const [form, setForm] = useState<Omit<Maestro, "id">>(emptyForm);
 
-  const [form, setForm] = useState<{ nombre: string; telefono: string; email: string; fechaCumpleanos: string; turno: Turno; estado: Estado }>({
-    nombre: '', telefono: '', email: '', fechaCumpleanos: '', turno: 'mañana', estado: 'activo',
-  });
+  useEffect(() => {
+    loadMaestros();
+  }, []);
 
-  const filtered = maestros.filter(m =>
-    m.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    m.email.toLowerCase().includes(search.toLowerCase())
+  async function loadMaestros() {
+    try {
+      setLoading(true);
+      setMaestros(await getMaestros());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudieron cargar los maestros.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const filtered = useMemo(
+    () =>
+      maestros.filter(
+        (maestro) =>
+          maestro.nombre.toLowerCase().includes(search.toLowerCase()) ||
+          maestro.email.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [maestros, search],
   );
 
-  const openCreate = () => {
+  function openCreate() {
     setEditingMaestro(null);
-    setForm({ nombre: '', telefono: '', email: '', fechaCumpleanos: '', turno: 'mañana', estado: 'activo' });
+    setForm(emptyForm);
     setDialogOpen(true);
-  };
+  }
 
-  const openEdit = (m: Maestro) => {
-    setEditingMaestro(m);
-    setForm({ nombre: m.nombre, telefono: m.telefono, email: m.email, fechaCumpleanos: m.fechaCumpleanos, turno: m.turno, estado: m.estado });
+  function openEdit(maestro: Maestro) {
+    setEditingMaestro(maestro);
+    setForm({
+      nombre: maestro.nombre,
+      telefono: maestro.telefono,
+      email: maestro.email,
+      fechaCumpleanos: maestro.fechaCumpleanos || "",
+      grupo: maestro.grupo || "4-6",
+      turno: maestro.turno,
+      estado: maestro.estado,
+    });
     setDialogOpen(true);
-  };
+  }
 
-  const handleSave = () => {
-    if (editingMaestro) {
-      setMaestros(prev => prev.map(m => m.id === editingMaestro.id ? { ...m, ...form } : m));
-    } else {
-      setMaestros(prev => [...prev, { ...form, id: Date.now().toString() }]);
+  async function handleSave() {
+    try {
+      if (editingMaestro) {
+        const updated = await updateMaestro(editingMaestro.id, form);
+        setMaestros((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        toast.success("Maestro actualizado.");
+      } else {
+        const created = await createMaestro(form);
+        setMaestros((current) => [created, ...current]);
+        toast.success("Maestro creado.");
+      }
+
+      setDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar el maestro.");
     }
-    setDialogOpen(false);
-  };
+  }
 
-  const handleDelete = (id: string) => {
-    setMaestros(prev => prev.filter(m => m.id !== id));
-  };
+  async function handleDelete(id: number) {
+    try {
+      await deleteMaestro(id);
+      setMaestros((current) => current.filter((maestro) => maestro.id !== id));
+      toast.success("Maestro eliminado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo eliminar el maestro.");
+    }
+  }
 
   return (
     <AppLayout>
       <PageHeader
         title="Maestros"
-        description="Gestión del equipo de maestros del ministerio"
+        description="Gestion del equipo de maestros del ministerio"
         actions={
           <Button onClick={openCreate} className="gap-2">
-            <Plus className="w-4 h-4" /> Nuevo Maestro
+            <Plus className="h-4 w-4" /> Nuevo Maestro
           </Button>
         }
       />
 
-      {/* Search */}
-      <div className="relative max-w-sm mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar maestro..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="relative mb-6 max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input placeholder="Buscar maestro..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
       </div>
 
-      {/* Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map((m) => (
-          <div key={m.id} className="bg-card rounded-xl border border-border/50 shadow-sm p-5 hover:shadow-md transition-all duration-200 animate-fade-in">
-            <div className="flex items-start justify-between mb-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filtered.map((maestro) => (
+          <div key={maestro.id} className="rounded-xl border border-border/50 bg-card p-5 shadow-sm transition-all duration-200 hover:shadow-md animate-fade-in">
+            <div className="mb-3 flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary">{m.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)}</span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-sm font-bold text-primary">
+                    {maestro.nombre
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </span>
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground text-sm">{m.nombre}</p>
-                  <p className="text-xs text-muted-foreground capitalize">Turno {m.turno}</p>
+                  <p className="text-sm font-semibold text-foreground">{maestro.nombre}</p>
+                  <p className="text-xs capitalize text-muted-foreground">Turno {maestro.turno} - Aula {maestro.grupo || "Sin grupo"}</p>
                 </div>
               </div>
-              <StatusBadge status={m.estado} />
+              <StatusBadge status={maestro.estado} />
             </div>
-            <div className="space-y-1.5 mb-4">
+            <div className="mb-4 space-y-1.5">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Phone className="w-3 h-3" /> {m.telefono}
+                <Phone className="h-3 w-3" /> {maestro.telefono || "Sin telefono"}
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Mail className="w-3 h-3" /> {m.email}
+                <Mail className="h-3 w-3" /> {maestro.email || "Sin email"}
               </div>
             </div>
-            <div className="flex gap-2 pt-3 border-t border-border/50">
-              <Button variant="outline" size="sm" onClick={() => openEdit(m)} className="flex-1 gap-1 text-xs">
-                <Pencil className="w-3 h-3" /> Editar
+            <div className="flex gap-2 border-t border-border/50 pt-3">
+              <Button variant="outline" size="sm" onClick={() => openEdit(maestro)} className="flex-1 gap-1 text-xs">
+                <Pencil className="h-3 w-3" /> Editar
               </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDelete(m.id)} className="text-destructive hover:text-destructive gap-1 text-xs">
-                <Trash2 className="w-3 h-3" /> Eliminar
+              <Button variant="outline" size="sm" onClick={() => handleDelete(maestro.id)} className="gap-1 text-xs text-destructive hover:text-destructive">
+                <Trash2 className="h-3 w-3" /> Eliminar
               </Button>
             </div>
           </div>
         ))}
       </div>
 
-      {filtered.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground">
+      {!loading && filtered.length === 0 && (
+        <div className="py-16 text-center text-muted-foreground">
           <p className="text-lg font-medium">No se encontraron maestros</p>
-          <p className="text-sm">Intenta con otro término de búsqueda</p>
+          <p className="text-sm">Intenta con otro termino de busqueda</p>
         </div>
       )}
 
-      {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-display">{editingMaestro ? 'Editar Maestro' : 'Nuevo Maestro'}</DialogTitle>
+            <DialogTitle className="font-display">{editingMaestro ? "Editar Maestro" : "Nuevo Maestro"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -131,7 +180,7 @@ export default function MaestrosPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Teléfono</Label>
+                <Label>Telefono</Label>
                 <Input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
               </div>
               <div className="space-y-2">
@@ -141,32 +190,45 @@ export default function MaestrosPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Cumpleaños</Label>
+                <Label>Cumpleanos</Label>
                 <Input type="date" value={form.fechaCumpleanos} onChange={(e) => setForm({ ...form, fechaCumpleanos: e.target.value })} />
               </div>
               <div className="space-y-2">
-                <Label>Turno</Label>
-                <Select value={form.turno} onValueChange={(v) => setForm({ ...form, turno: v as 'mañana' | 'tarde' })}>
+                <Label>Aula / Grupo</Label>
+                <Select value={form.grupo || "4-6"} onValueChange={(value) => setForm({ ...form, grupo: value })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="mañana">Mañana</SelectItem>
-                    <SelectItem value="tarde">Tarde</SelectItem>
+                    <SelectItem value="4-6">4-6 anos</SelectItem>
+                    <SelectItem value="7-9">7-9 anos</SelectItem>
+                    <SelectItem value="10-12">10-12 anos</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Estado</Label>
-              <Select value={form.estado} onValueChange={(v) => setForm({ ...form, estado: v as 'activo' | 'inactivo' })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="activo">Activo</SelectItem>
-                  <SelectItem value="inactivo">Inactivo</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Turno</Label>
+                <Select value={form.turno} onValueChange={(value) => setForm({ ...form, turno: value as Turno })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manana">Manana</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Estado</Label>
+                <Select value={form.estado} onValueChange={(value) => setForm({ ...form, estado: value as Estado })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="activo">Activo</SelectItem>
+                    <SelectItem value="inactivo">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <Button onClick={handleSave} className="w-full">
-              {editingMaestro ? 'Guardar Cambios' : 'Crear Maestro'}
+              {editingMaestro ? "Guardar Cambios" : "Crear Maestro"}
             </Button>
           </div>
         </DialogContent>

@@ -1,27 +1,39 @@
 import { useState } from "react";
 import { ArrowRight, Building2, Church, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useNavigate } from "react-router-dom";
+import { login } from "@/lib/api";
+import { setAuthSession } from "@/lib/auth";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!email.trim() || !password.trim()) {
-      setError("Ingresa tu correo y contraseña para continuar.");
+      setError("Ingresa tu correo y contrasena para continuar.");
       return;
     }
 
-    setError("");
-    localStorage.setItem("cch_auth", "1");
-    navigate("/");
+    try {
+      setLoading(true);
+      setError("");
+      const response = await login(email, password);
+      setAuthSession(response.user);
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo iniciar sesion.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -49,7 +61,7 @@ export default function LoginPage() {
               Gestiona tu ministerio desde un panel seguro y organizado.
             </h2>
             <p className="mt-5 max-w-md text-primary-foreground/75">
-              Control de niños, maestros, asistencia y reportes en un solo lugar, con experiencia moderna y enfocada
+              Control de ninos, maestros, asistencia y reportes en un solo lugar, con experiencia moderna y enfocada
               en operaciones diarias.
             </p>
 
@@ -67,7 +79,7 @@ export default function LoginPage() {
                   <Building2 className="h-4 w-4 text-secondary" />
                   <p className="text-sm font-semibold">Panel unificado</p>
                 </div>
-                <p className="text-sm text-primary-foreground/75">Flujo rápido para navegación del menú y dashboard.</p>
+                <p className="text-sm text-primary-foreground/75">Flujo rapido para navegacion del menu y dashboard.</p>
               </div>
             </div>
           </div>
@@ -87,12 +99,12 @@ export default function LoginPage() {
               </div>
 
               <h3 className="font-display text-3xl font-bold text-foreground">Bienvenido</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Inicia sesión para entrar al dashboard del menú.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Inicia sesion para entrar al dashboard del menu.</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo electrónico</Label>
+                <Label htmlFor="email">Correo electronico</Label>
                 <Input
                   id="email"
                   type="email"
@@ -104,7 +116,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <Label htmlFor="password">Contrasena</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -130,8 +142,8 @@ export default function LoginPage() {
                 </p>
               )}
 
-              <Button type="submit" className="h-11 w-full font-semibold">
-                Iniciar sesión
+              <Button type="submit" className="h-11 w-full font-semibold" disabled={loading}>
+                {loading ? "Ingresando..." : "Iniciar sesion"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>
@@ -140,9 +152,9 @@ export default function LoginPage() {
               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 Powered by Cloudix Technologies
               </p>
-              <p className="mt-2 text-xs text-muted-foreground">Sistema de Gestión Ministerial v1.0</p>
+              <p className="mt-2 text-xs text-muted-foreground">Sistema de Gestion Ministerial v1.0</p>
               <p className="mt-4 text-[11px] text-muted-foreground">
-                Demo: usa cualquier correo y contraseña para ingresar.
+                Credenciales semilla: admin@iglesia.com / admin123
               </p>
             </div>
           </div>
