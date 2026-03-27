@@ -13,6 +13,6 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: "Not Found" }));
 });
 
-server.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+app.listen(4000, '0.0.0.0', () => {
+  console.log('Backend corriendo');
 });
