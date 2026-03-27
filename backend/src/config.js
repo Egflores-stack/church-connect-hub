@@ -1,19 +1,23 @@
-const path = require("path");
+// backend/src/config/db.js o backend/src/config/db.ts
+import pg from 'pg';
+const { Pool } = pg;
 
-const ROOT_DIR = path.resolve(__dirname, "..");
-const SQL_DIR = path.join(ROOT_DIR, "sql");
-const SCHEMA_PATH = path.join(SQL_DIR, "schema.sql");
-const PORT = Number(process.env.PORT || 4000);
-const HOST = process.env.HOST || "0.0.0.0";
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  "postgresql://postgres:postgres@localhost:5432/church_connect_hub";
+export const pool = new Pool({
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'Infantil',
+  password: process.env.DB_PASSWORD || '2026',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
 
-module.exports = {
-  ROOT_DIR,
-  SQL_DIR,
-  SCHEMA_PATH,
-  PORT,
-  HOST,
-  DATABASE_URL,
-};
+// Opcional: probar conexión
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('❌ Error conectando a la base de datos:', err.message);
+  } else {
+    console.log('✅ Conectado a PostgreSQL:', res.rows[0].now);
+  }
+});
