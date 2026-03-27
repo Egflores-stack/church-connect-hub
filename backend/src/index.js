@@ -16,3 +16,6 @@ const server = http.createServer((req, res) => {
 app.listen(4000, '0.0.0.0', () => {
   console.log('Backend corriendo');
 });
+app.get('/', (req, res) => {
+  res.send('Servidor funcionando 🚀');
+});
