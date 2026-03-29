@@ -501,3 +501,6 @@ initializeDatabase()
     console.error("No se pudo inicializar PostgreSQL:", error.message);
     process.exit(1);
   });
+app.listen(4000,'0.0.0.0', () => {
+  console.log('Backend running on http://localhost:4000');
+});

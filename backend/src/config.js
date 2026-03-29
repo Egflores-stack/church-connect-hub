@@ -1,6 +1,6 @@
 const path = require("path");
 
-const DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/church_connect_hub";
+const DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/infantil";
 
 function buildDatabaseUrlFromParts() {
   const user = process.env.DB_USER;
