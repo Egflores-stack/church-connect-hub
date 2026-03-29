@@ -6,6 +6,33 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { getAppNotifications, getDashboard, getNinos } from "@/lib/api";
 import type { AppNotification, DashboardSummary, Nino } from "@/types";
 
+function getMonthFromIsoDate(value?: string) {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  const parts = value.split("-");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const month = Number(parts[1]);
+  return Number.isNaN(month) ? null : month;
+}
+
+function formatBirthdayDate(value?: string) {
+  if (!value || typeof value !== "string") {
+    return "Fecha no disponible";
+  }
+
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return "Fecha no disponible";
+  }
+
+  return date.toLocaleDateString("es-NI");
+}
+
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [ninos, setNinos] = useState<Nino[]>([]);
@@ -54,7 +81,7 @@ export default function DashboardPage() {
 
   const currentMonth = new Date().getMonth() + 1;
   const cumplesMes = ninos.filter((nino) => {
-    const month = Number(nino.fechaNacimiento.split("-")[1]);
+    const month = getMonthFromIsoDate(nino.fechaNacimiento);
     return month === currentMonth;
   });
 
@@ -91,7 +118,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-foreground">{notification.title}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{notification.message}</p>
                   <p className="mt-2 text-xs font-medium text-amber-700">
-                    Fecha: {new Date(`${notification.birthdayDate}T00:00:00`).toLocaleDateString("es-NI")}
+                    Fecha: {formatBirthdayDate(notification.birthdayDate)}
                   </p>
                 </div>
               ))}

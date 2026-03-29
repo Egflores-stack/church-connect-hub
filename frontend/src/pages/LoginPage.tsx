@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { ArrowRight, Building2, Church, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  UsersRound,
+  Waypoints,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,10 +16,29 @@ import { Label } from "@/components/ui/label";
 import { login } from "@/lib/api";
 import { setAuthSession } from "@/lib/auth";
 
+const features = [
+  {
+    icon: Waypoints,
+    title: "Conexion Ministerial",
+  },
+  {
+    icon: UsersRound,
+    title: "Control de Ninos y Maestros",
+  },
+  {
+    icon: BarChart3,
+    title: "Asistencia al 98%",
+  },
+  {
+    icon: BarChart3,
+    title: "Reportes Claros: 360",
+  },
+];
+
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -37,86 +65,68 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-100">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
-        <div className="absolute right-[-80px] top-[15%] h-80 w-80 rounded-full bg-secondary/20 blur-3xl" />
-        <div className="absolute bottom-[-90px] left-1/3 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
-      </div>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-4 py-8 sm:px-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(30,58,138,0.07),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(4,120,87,0.06),transparent_22%)]" />
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col lg:flex-row">
-        <section className="hidden lg:flex lg:w-1/2 lg:items-center lg:p-10">
-          <div className="h-full w-full rounded-[30px] bg-gradient-to-b from-primary to-primary/90 p-10 text-primary-foreground shadow-2xl">
-            <div className="mb-10 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
-                <Church className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm uppercase tracking-[0.22em] text-primary-foreground/70">Church Connect Hub</p>
-                <h1 className="font-display text-2xl font-bold">Acceso Administrativo</h1>
-              </div>
+      <div className="relative flex min-h-[720px] w-full max-w-7xl overflow-hidden rounded-[36px] border border-slate-200/80 bg-white shadow-[0_35px_90px_rgba(15,23,42,0.08)]">
+        <section className="flex w-full flex-col justify-center px-8 py-12 sm:px-12 lg:w-1/2 lg:px-16">
+          <div className="max-w-xl">
+            <div className="mb-14">
+              <p className="text-[clamp(3rem,7vw,5.5rem)] font-extrabold tracking-[0.08em] text-[#1E3A8A]">
+                LIDERA
+              </p>
+              <p className="mt-2 text-sm font-light uppercase tracking-[0.42em] text-slate-500">
+                SISTEMA DE GESTION
+              </p>
             </div>
 
-            <h2 className="max-w-md font-display text-4xl leading-tight">
-              Gestiona tu ministerio desde un panel seguro y organizado.
-            </h2>
-            <p className="mt-5 max-w-md text-primary-foreground/75">
-              Control de ninos, maestros, asistencia y reportes en un solo lugar, con experiencia moderna y enfocada
-              en operaciones diarias.
-            </p>
-
-            <div className="mt-10 grid gap-4">
-              <div className="rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur">
-                <div className="mb-2 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-secondary" />
-                  <p className="text-sm font-semibold">Acceso protegido</p>
+            <div className="space-y-5">
+              {features.map(({ icon: Icon, title }) => (
+                <div
+                  key={title}
+                  className="flex items-center gap-4 rounded-[22px] border border-slate-100 bg-white px-5 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(180deg,#eff6ff_0%,#f8fafc_100%)] text-[#1E3A8A] shadow-inner">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <p className="text-lg font-medium text-[#111827]">{title}</p>
                 </div>
-                <p className="text-sm text-primary-foreground/75">Ingreso controlado para el personal autorizado.</p>
-              </div>
-
-              <div className="rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur">
-                <div className="mb-2 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-secondary" />
-                  <p className="text-sm font-semibold">Panel unificado</p>
-                </div>
-                <p className="text-sm text-primary-foreground/75">Flujo rapido para navegacion del menu y dashboard.</p>
-              </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="flex flex-1 items-center justify-center p-6 sm:p-10">
-          <div className="w-full max-w-md rounded-3xl border border-border/70 bg-card/90 p-7 shadow-2xl backdrop-blur-sm sm:p-10">
-            <div className="mb-8">
-              <div className="mb-6 flex items-center gap-3 lg:hidden">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <Church className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Church Connect Hub</p>
-                  <p className="font-display text-lg">Acceso Administrativo</p>
-                </div>
+        <section className="hidden lg:flex lg:w-1/2 lg:items-center lg:justify-center lg:bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_60%,#f3f4f6_100%)] lg:px-10">
+          <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/80 p-9 shadow-[0_28px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <div className="mb-8 text-center">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] text-slate-400 shadow-inner">
+                <Lock className="h-8 w-8" />
               </div>
-
-              <h3 className="font-display text-3xl font-bold text-foreground">Bienvenido</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Inicia sesion para entrar al dashboard del menu.</p>
+              <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Bienvenido</h1>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo electronico</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@iglesia.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11"
-                />
+                <Label htmlFor="email" className="text-sm font-medium text-slate-600">
+                  Tu usuario
+                </Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="admin@iglesia.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-14 rounded-[12px] border-slate-200 bg-white pl-11 text-slate-900 shadow-[inset_0_1px_3px_rgba(15,23,42,0.08)] placeholder:text-slate-400 focus-visible:ring-[#1E3A8A]/20"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Contrasena</Label>
+                <Label htmlFor="password" className="text-sm font-medium text-slate-600">
+                  Contrasena
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -124,12 +134,12 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="h-11 pr-10"
+                    className="h-14 rounded-[12px] border-slate-200 bg-white pr-12 text-slate-900 shadow-[inset_0_1px_3px_rgba(15,23,42,0.08)] placeholder:text-slate-400 focus-visible:ring-[#1E3A8A]/20"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -137,29 +147,32 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p className="rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
                 </p>
               )}
 
-              <Button type="submit" className="h-11 w-full font-semibold" disabled={loading}>
-                {loading ? "Ingresando..." : "Iniciar sesion"}
+              <Button
+                type="submit"
+                disabled={loading}
+                className="h-14 w-full rounded-[12px] bg-[#047857] text-base font-semibold text-white shadow-[0_18px_40px_rgba(4,120,87,0.24)] transition hover:bg-[#065f46]"
+              >
+                {loading ? "Entrando..." : "Entrar al Sistema"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-            </form>
 
-            <div className="mt-8 border-t border-border/70 pt-5 text-center">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                Powered by Cloudix Technologies
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">Sistema de Gestion Ministerial v1.0</p>
-              <p className="mt-4 text-[11px] text-muted-foreground">
-                Credenciales semilla: admin@iglesia.com / admin123
-              </p>
-            </div>
+              <div className="rounded-[16px] border border-slate-200 bg-[#F3F4F6] px-4 py-4 text-sm text-slate-600">
+                <p className="font-medium text-slate-700">Credenciales de prueba</p>
+                <p className="mt-1">admin@iglesia.com / admin123</p>
+              </div>
+            </form>
           </div>
         </section>
       </div>
+
+      <footer className="absolute bottom-4 left-0 right-0 text-center text-xs tracking-[0.22em] text-slate-500">
+        POWERED BY CLOUDIX TECHNOLOGIES
+      </footer>
     </div>
   );
 }

@@ -9,8 +9,34 @@ function addDays(date, amount) {
   return copy;
 }
 
+function isValidDate(date) {
+  return date instanceof Date && !Number.isNaN(date.getTime());
+}
+
+function parseBirthdayDate(fechaCumpleanos) {
+  if (!fechaCumpleanos) {
+    return null;
+  }
+
+  if (fechaCumpleanos instanceof Date) {
+    return isValidDate(fechaCumpleanos) ? fechaCumpleanos : null;
+  }
+
+  if (typeof fechaCumpleanos === "string") {
+    const normalized = fechaCumpleanos.trim().slice(0, 10);
+    const parsed = new Date(`${normalized}T00:00:00`);
+    return isValidDate(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 function nextBirthdayDate(fechaCumpleanos) {
-  const source = new Date(`${fechaCumpleanos}T00:00:00`);
+  const source = parseBirthdayDate(fechaCumpleanos);
+  if (!source) {
+    return null;
+  }
+
   const today = new Date();
   const next = new Date(today.getFullYear(), source.getMonth(), source.getDate());
 
@@ -22,6 +48,10 @@ function nextBirthdayDate(fechaCumpleanos) {
 }
 
 function formatDate(date) {
+  if (!isValidDate(date)) {
+    return null;
+  }
+
   return date.toISOString().slice(0, 10);
 }
 
@@ -110,12 +140,17 @@ async function listUpcomingBirthdays(daysAhead = 30) {
   return people
     .map((person) => {
       const next = nextBirthdayDate(person.fechaCumpleanos);
+      if (!next) {
+        return null;
+      }
+
       return {
         ...person,
         nextBirthday: formatDate(next),
         daysUntil: daysUntil(next),
       };
     })
+    .filter(Boolean)
     .filter((person) => new Date(`${person.nextBirthday}T00:00:00`) <= maxDate)
     .sort((a, b) => a.daysUntil - b.daysUntil || a.nombre.localeCompare(b.nombre));
 }
@@ -251,7 +286,12 @@ async function syncBirthdayCalendarEvents() {
   let synced = 0;
 
   for (const birthday of birthdays) {
-    const monthDay = birthday.fechaCumpleanos.slice(5, 10);
+    const parsedBirthday = parseBirthdayDate(birthday.fechaCumpleanos);
+    if (!parsedBirthday) {
+      continue;
+    }
+
+    const monthDay = formatDate(parsedBirthday).slice(5, 10);
     const startDate = `${currentYear}-${monthDay}`;
     const end = new Date(`${startDate}T00:00:00`);
     end.setDate(end.getDate() + 1);

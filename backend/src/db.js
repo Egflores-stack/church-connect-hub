@@ -1,16 +1,12 @@
 const fs = require("fs");
-const { Pool } = require("pg");
-const { DATABASE_URL, SCHEMA_PATH } = require("./config");
+const { SCHEMA_PATH } = require("./config");
+const { pool } = require("./config/db");
 const {
   seedUsers,
   seedMaestros,
   seedNinos,
   seedAttendances,
 } = require("./seed");
-
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-});
 
 async function query(text, params = []) {
   return pool.query(text, params);

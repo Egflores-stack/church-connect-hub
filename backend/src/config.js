@@ -1,23 +1,33 @@
-// backend/src/config/db.js o backend/src/config/db.ts
-import pg from 'pg';
-const { Pool } = pg;
+const path = require("path");
 
-export const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'Infantil',
-  password: process.env.DB_PASSWORD || '2026',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+const DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/church_connect_hub";
 
-// Opcional: probar conexión
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Error conectando a la base de datos:', err.message);
-  } else {
-    console.log('✅ Conectado a PostgreSQL:', res.rows[0].now);
+function buildDatabaseUrlFromParts() {
+  const user = process.env.DB_USER;
+  const password = process.env.DB_PASSWORD;
+  const host = process.env.DB_HOST || "localhost";
+  const port = process.env.DB_PORT || "5432";
+  const database = process.env.DB_NAME;
+
+  if (!user || !database) {
+    return null;
   }
-});
+
+  const url = new URL(`postgresql://${host}:${port}/${database}`);
+  url.username = user;
+  url.password = password || "";
+  return url.toString();
+}
+
+const DATABASE_URL =
+  process.env.DATABASE_URL || buildDatabaseUrlFromParts() || DEFAULT_DATABASE_URL;
+const PORT = Number(process.env.PORT || 4000);
+const HOST = process.env.HOST || "0.0.0.0";
+const SCHEMA_PATH = path.resolve(__dirname, "../sql/schema.sql");
+
+module.exports = {
+  DATABASE_URL,
+  PORT,
+  HOST,
+  SCHEMA_PATH,
+};
