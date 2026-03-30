@@ -27,21 +27,21 @@ export default function UsuariosPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    try {
-      const [usersData, permissionsData] = await Promise.all([getUsers(), getRolePermissions()]);
-      setUsers(usersData);
-      setPermissions(permissionsData);
-      if (permissionsData[0] && !form.role) {
-        setForm((current) => ({ ...current, role: permissionsData[0].role }));
+    async function loadInitialData() {
+      try {
+        const [usersData, permissionsData] = await Promise.all([getUsers(), getRolePermissions()]);
+        setUsers(usersData);
+        setPermissions(permissionsData);
+        if (permissionsData[0] && !formBase.role) {
+          setForm((current) => ({ ...current, role: permissionsData[0].role }));
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudo cargar el modulo de usuarios.");
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo cargar el modulo de usuarios.");
     }
-  }
+
+    void loadInitialData();
+  }, []);
 
   function startEdit(user: User) {
     setEditingId(user.id);

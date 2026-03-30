@@ -55,7 +55,7 @@ export default function LoginPage() {
       setLoading(true);
       setError("");
       const response = await login(email, password);
-      setAuthSession(response.user);
+      setAuthSession(response.user, response.token);
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesion.");

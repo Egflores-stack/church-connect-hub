@@ -1,6 +1,7 @@
 const path = require("path");
 
 const DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/infantil";
+const DEFAULT_AUTH_SECRET = "church-connect-hub-dev-secret";
 
 function buildDatabaseUrlFromParts() {
   const user = process.env.DB_USER;
@@ -25,9 +26,24 @@ const PORT = Number(process.env.PORT || 4000);
 const HOST = process.env.HOST || "0.0.0.0";
 const SCHEMA_PATH = path.resolve(__dirname, "../sql/schema.sql");
 
+function resolveAuthSecret() {
+  if (process.env.AUTH_SECRET) {
+    return process.env.AUTH_SECRET;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET es obligatorio en produccion.");
+  }
+
+  return DEFAULT_AUTH_SECRET;
+}
+
+const AUTH_SECRET = resolveAuthSecret();
+
 module.exports = {
   DATABASE_URL,
   PORT,
   HOST,
   SCHEMA_PATH,
+  AUTH_SECRET,
 };

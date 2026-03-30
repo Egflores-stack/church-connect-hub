@@ -1,6 +1,7 @@
 const fs = require("fs");
 const { SCHEMA_PATH } = require("./config");
 const { pool } = require("./config/db");
+const { createPasswordHash, isPasswordHashed } = require("./auth");
 const {
   seedUsers,
   seedMaestros,
@@ -96,10 +97,12 @@ async function seedDatabase() {
     for (const user of seedUsers) {
       await query(
         "INSERT INTO users (nombre, email, password, fecha_cumpleanos, role, estado) VALUES ($1, $2, $3, $4, $5, $6)",
-        [user.nombre, user.email, user.password, user.fechaCumpleanos || null, user.role, user.estado],
+        [user.nombre, user.email, createPasswordHash(user.password), user.fechaCumpleanos || null, user.role, user.estado],
       );
     }
   }
+
+  await migrateLegacyPasswords();
 
   const maestrosCount = await query("SELECT COUNT(*)::int AS total FROM maestros");
   if (maestrosCount.rows[0].total === 0) {
@@ -210,7 +213,7 @@ async function createUser(payload) {
     [
       payload.nombre,
       payload.email,
-      payload.password,
+      createPasswordHash(payload.password),
       payload.fechaCumpleanos || null,
       payload.role,
       payload.estado || "activo",
@@ -222,7 +225,9 @@ async function createUser(payload) {
 async function updateUser(id, payload) {
   const current = await findUserByEmail(payload.email);
   const passwordResult = await query("SELECT password FROM users WHERE id = $1", [id]);
-  const password = payload.password || passwordResult.rows[0]?.password || "";
+  const password = payload.password
+    ? createPasswordHash(payload.password)
+    : passwordResult.rows[0]?.password || "";
 
   if (current && current.id !== id) {
     const error = new Error("Ya existe un usuario con ese correo.");
@@ -256,6 +261,28 @@ async function updateUser(id, payload) {
 async function deleteUser(id) {
   const result = await query("DELETE FROM users WHERE id = $1", [id]);
   return result.rowCount > 0;
+}
+
+async function updateUserPassword(id, passwordHash) {
+  await query("UPDATE users SET password = $1 WHERE id = $2", [passwordHash, id]);
+}
+
+async function findUserById(id) {
+  const result = await query(
+    "SELECT id, nombre, email, fecha_cumpleanos, role, estado, creado_en FROM users WHERE id = $1 LIMIT 1",
+    [id],
+  );
+  return result.rows[0] ? mapUser(result.rows[0]) : null;
+}
+
+async function migrateLegacyPasswords() {
+  const result = await query("SELECT id, password FROM users");
+
+  for (const row of result.rows) {
+    if (row.password && !isPasswordHashed(row.password)) {
+      await updateUserPassword(row.id, createPasswordHash(row.password));
+    }
+  }
 }
 
 async function listMaestros(filters = {}) {
@@ -856,9 +883,11 @@ module.exports = {
   initializeDatabase,
   getUsers,
   getUserById,
+  findUserById,
   findUserByEmail,
   createUser,
   updateUser,
+  updateUserPassword,
   deleteUser,
   listMaestros,
   getMaestroById,

@@ -1,20 +1,24 @@
 import type { User } from "@/types";
 
-const AUTH_FLAG_KEY = "cch_auth";
 const AUTH_USER_KEY = "cch_user";
+const AUTH_TOKEN_KEY = "cch_token";
 
 export function isAuthenticated() {
-  return localStorage.getItem(AUTH_FLAG_KEY) === "1";
+  return Boolean(getAuthToken() && getAuthUser());
 }
 
-export function setAuthSession(user: User) {
-  localStorage.setItem(AUTH_FLAG_KEY, "1");
+export function setAuthSession(user: User, token: string) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
 }
 
 export function clearAuthSession() {
-  localStorage.removeItem(AUTH_FLAG_KEY);
+  localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
+}
+
+export function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
 }
 
 export function getAuthUser(): User | null {

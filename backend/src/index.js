@@ -5,9 +5,11 @@ const {
   initializeDatabase,
   getUsers,
   getUserById,
+  findUserById,
   findUserByEmail,
   createUser,
   updateUser,
+  updateUserPassword,
   deleteUser,
   listMaestros,
   getMaestroById,
@@ -36,7 +38,15 @@ const {
   scheduleDailyBirthdayReminderRefresh,
 } = require("./reminders");
 const { getCatalogSettings, updateCatalogSettings } = require("./catalogs");
-const { buildRolePermissions } = require("./permissions");
+const { buildRolePermissions, getPermissionsForRole } = require("./permissions");
+const {
+  createPasswordHash,
+  verifyPassword,
+  sanitizeUser,
+  createSessionToken,
+  verifySessionToken,
+  getBearerToken,
+} = require("./auth");
 const { readJsonBody, sendJson, sendNoContent, parseId } = require("./http");
 
 function normalizeTurno(turno) {
@@ -66,6 +76,60 @@ function buildQueryFilters(url) {
     search: url.searchParams.get("search") || undefined,
     fecha: url.searchParams.get("fecha") || undefined,
   };
+}
+
+async function authenticateRequest(req, res) {
+  const token = getBearerToken(req);
+  const session = verifySessionToken(token);
+
+  if (!session) {
+    sendJson(res, 401, { error: "Sesion invalida o expirada." });
+    return null;
+  }
+
+  const user = await findUserById(session.sub);
+  if (!user || user.estado === "inactivo") {
+    sendJson(res, 401, { error: "Usuario no autorizado." });
+    return null;
+  }
+
+  return {
+    session,
+    user,
+    permissions: getPermissionsForRole(user.role).permissions,
+  };
+}
+
+function hasPermission(auth, permission) {
+  return auth.permissions.includes(permission);
+}
+
+async function requirePermission(req, res, permission) {
+  const auth = await authenticateRequest(req, res);
+  if (!auth) {
+    return null;
+  }
+
+  if (!hasPermission(auth, permission)) {
+    sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." });
+    return null;
+  }
+
+  return auth;
+}
+
+async function requireAnyPermission(req, res, permissions) {
+  const auth = await authenticateRequest(req, res);
+  if (!auth) {
+    return null;
+  }
+
+  if (!permissions.some((permission) => hasPermission(auth, permission))) {
+    sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." });
+    return null;
+  }
+
+  return auth;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -117,11 +181,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === "/api/users" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await getUsers());
       return;
     }
 
     if (pathname === "/api/users" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       const missing = validateRequiredFields(payload, ["nombre", "email", "password", "role"]);
 
@@ -142,6 +214,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "GET") {
+        const auth = await requirePermission(req, res, "users.manage");
+        if (!auth) {
+          return;
+        }
         const user = await getUserById(id);
         if (!user) {
           sendJson(res, 404, { error: "Usuario no encontrado" });
@@ -153,6 +229,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "PUT") {
+        const auth = await requirePermission(req, res, "users.manage");
+        if (!auth) {
+          return;
+        }
         const user = await getUserById(id);
         if (!user) {
           sendJson(res, 404, { error: "Usuario no encontrado" });
@@ -172,6 +252,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "DELETE") {
+        const auth = await requirePermission(req, res, "users.manage");
+        if (!auth) {
+          return;
+        }
         const deleted = await deleteUser(id);
         if (!deleted) {
           sendJson(res, 404, { error: "Usuario no encontrado" });
@@ -193,80 +277,125 @@ const server = http.createServer(async (req, res) => {
       }
 
       const user = await findUserByEmail(payload.email);
-      if (!user || user.password !== payload.password) {
+      if (!user || user.estado === "inactivo" || !verifyPassword(payload.password, user.password)) {
         sendJson(res, 401, { error: "Credenciales invalidas" });
         return;
       }
 
+      if (user.password === payload.password) {
+        await updateUserPassword(user.id, createPasswordHash(payload.password));
+      }
+
+      const safeUser = sanitizeUser(user);
+
       sendJson(res, 200, {
         message: "Login exitoso",
-        user: {
-          id: user.id,
-          nombre: user.nombre,
-          email: user.email,
-          role: user.role,
-          estado: user.estado,
-        },
+        token: createSessionToken(user),
+        user: safeUser,
       });
       return;
     }
 
     if (pathname === "/api/dashboard" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "dashboard.view");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await getDashboardSummary());
       return;
     }
 
     if (pathname === "/api/config/notificaciones" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await getNotificationSettings());
       return;
     }
 
     if (pathname === "/api/config/notificaciones" && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       sendJson(res, 200, await updateNotificationSettings(payload));
       return;
     }
 
     if (pathname === "/api/config/catalogos" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await getCatalogSettings());
       return;
     }
 
     if (pathname === "/api/config/catalogos" && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       sendJson(res, 200, await updateCatalogSettings(payload));
       return;
     }
 
     if (pathname === "/api/permisos/roles" && req.method === "GET") {
+      const auth = await authenticateRequest(req, res);
+      if (!auth) {
+        return;
+      }
       const catalogs = await getCatalogSettings();
       sendJson(res, 200, buildRolePermissions(catalogs.roles));
       return;
     }
 
     if (pathname === "/api/notificaciones/app" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "dashboard.view");
+      if (!auth) {
+        return;
+      }
       const limit = Number(url.searchParams.get("limit") || 6);
       sendJson(res, 200, await listAppNotifications(limit));
       return;
     }
 
     if (pathname === "/api/cumpleanos/proximos" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "dashboard.view");
+      if (!auth) {
+        return;
+      }
       const days = Number(url.searchParams.get("days") || 30);
       sendJson(res, 200, await listUpcomingBirthdays(days));
       return;
     }
 
     if (pathname === "/api/cumpleanos/sync-calendar" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await syncBirthdayCalendarEvents());
       return;
     }
 
     if (pathname === "/api/maestros" && req.method === "GET") {
+      const auth = await requireAnyPermission(req, res, ["maestros.manage", "attendance.manage"]);
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await listMaestros(buildQueryFilters(url)));
       return;
     }
 
     if (pathname === "/api/maestros" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "maestros.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       payload.turno = normalizeTurno(payload.turno);
       const missing = validateRequiredFields(payload, ["nombre", "turno"]);
@@ -288,6 +417,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "GET") {
+        const auth = await requireAnyPermission(req, res, ["maestros.manage", "attendance.manage"]);
+        if (!auth) {
+          return;
+        }
         const maestro = await getMaestroById(id);
         if (!maestro) {
           sendJson(res, 404, { error: "Maestro no encontrado" });
@@ -299,6 +432,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "PUT") {
+        const auth = await requirePermission(req, res, "maestros.manage");
+        if (!auth) {
+          return;
+        }
         const maestro = await getMaestroById(id);
         if (!maestro) {
           sendJson(res, 404, { error: "Maestro no encontrado" });
@@ -319,6 +456,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "DELETE") {
+        const auth = await requirePermission(req, res, "maestros.manage");
+        if (!auth) {
+          return;
+        }
         const deleted = await deleteMaestro(id);
         if (!deleted) {
           sendJson(res, 404, { error: "Maestro no encontrado" });
@@ -331,11 +472,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === "/api/ninos" && req.method === "GET") {
+      const auth = await requireAnyPermission(req, res, ["ninos.manage", "attendance.manage"]);
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await listNinos(buildQueryFilters(url)));
       return;
     }
 
     if (pathname === "/api/ninos" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "ninos.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       payload.turno = normalizeTurno(payload.turno);
       const missing = validateRequiredFields(payload, ["nombre", "fechaNacimiento", "grupo", "turno"]);
@@ -357,6 +506,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "GET") {
+        const auth = await requireAnyPermission(req, res, ["ninos.manage", "attendance.manage"]);
+        if (!auth) {
+          return;
+        }
         const nino = await getNinoById(id);
         if (!nino) {
           sendJson(res, 404, { error: "Nino no encontrado" });
@@ -368,6 +521,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "PUT") {
+        const auth = await requirePermission(req, res, "ninos.manage");
+        if (!auth) {
+          return;
+        }
         const nino = await getNinoById(id);
         if (!nino) {
           sendJson(res, 404, { error: "Nino no encontrado" });
@@ -388,6 +545,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "DELETE") {
+        const auth = await requirePermission(req, res, "ninos.manage");
+        if (!auth) {
+          return;
+        }
         const deleted = await deleteNino(id);
         if (!deleted) {
           sendJson(res, 404, { error: "Nino no encontrado" });
@@ -400,11 +561,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === "/api/asistencias" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "attendance.manage");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await listAttendances(buildQueryFilters(url)));
       return;
     }
 
     if (pathname === "/api/asistencias" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "attendance.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       payload.turno = normalizeTurno(payload.turno);
       const missing = validateRequiredFields(payload, ["fecha", "turno", "ninoId", "registradoPor"]);
@@ -424,18 +593,26 @@ const server = http.createServer(async (req, res) => {
           maestroId: payload.maestroId ? Number(payload.maestroId) : null,
           presente: Boolean(payload.presente),
           maestroPresente: Boolean(payload.maestroPresente),
-          registradoPor: payload.registradoPor,
+          registradoPor: auth.user.email,
         }),
       );
       return;
     }
 
     if (pathname === "/api/asistencias-maestros" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "attendance.manage");
+      if (!auth) {
+        return;
+      }
       sendJson(res, 200, await listTeacherAttendances(buildQueryFilters(url)));
       return;
     }
 
     if (pathname === "/api/asistencias-maestros" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "attendance.manage");
+      if (!auth) {
+        return;
+      }
       const payload = await readJsonBody(req);
       payload.turno = normalizeTurno(payload.turno);
       const missing = validateRequiredFields(payload, ["fecha", "turno", "maestroId", "registradoPor"]);
@@ -453,19 +630,27 @@ const server = http.createServer(async (req, res) => {
           turno: payload.turno,
           maestroId: Number(payload.maestroId),
           presente: Boolean(payload.presente),
-          registradoPor: payload.registradoPor,
+          registradoPor: auth.user.email,
         }),
       );
       return;
     }
 
     if (pathname === "/api/reportes/asistencia" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "reports.view");
+      if (!auth) {
+        return;
+      }
       const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
       sendJson(res, 200, await getAttendanceReport(month));
       return;
     }
 
     if (pathname === "/api/reportes/avanzados" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "reports.view");
+      if (!auth) {
+        return;
+      }
       const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
       sendJson(res, 200, await getAdvancedReports(month));
       return;
@@ -501,6 +686,3 @@ initializeDatabase()
     console.error("No se pudo inicializar PostgreSQL:", error.message);
     process.exit(1);
   });
-app.listen(4000,'0.0.0.0', () => {
-  console.log('Backend running on http://localhost:4000');
-});

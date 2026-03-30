@@ -13,6 +13,7 @@ import type {
   UpcomingBirthday,
   User,
 } from "@/types";
+import { clearAuthSession, getAuthToken } from "./auth";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
@@ -26,9 +27,11 @@ class ApiError extends Error {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
     ...init,
@@ -38,6 +41,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearAuthSession();
+    }
     throw new ApiError(data?.error || "Error en la solicitud", response.status);
   }
 
@@ -45,7 +51,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function login(email: string, password: string) {
-  return apiFetch<{ message: string; user: User }>("/api/auth/login", {
+  return apiFetch<{ message: string; token: string; user: User }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
