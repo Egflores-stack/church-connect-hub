@@ -1,5 +1,4 @@
 const fs = require("fs");
-const { SCHEMA_PATH } = require("./config");
 const { pool } = require("./config/db");
 const { createPasswordHash, isPasswordHashed } = require("./auth");
 const {
