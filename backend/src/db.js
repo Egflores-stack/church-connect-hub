@@ -11,7 +11,7 @@ const {
 
 const path = require("path");
 
-const SCHEMA_PATH = path.join(__dirname, "schema.sql");
+const SCHEMA_PATH = path.join(__dirname, "../sql/schema.sql");
 
 async function query(text, params = []) {
   return pool.query(text, params);
