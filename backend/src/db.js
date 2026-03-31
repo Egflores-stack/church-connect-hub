@@ -12,6 +12,10 @@ const {
 async function query(text, params = []) {
   return pool.query(text, params);
 }
+const fs = require("fs");
+const path = require("path");
+
+const SCHEMA_PATH = path.join(__dirname, "schema.sql");
 
 function mapUser(row) {
   return {
