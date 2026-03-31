@@ -9,7 +9,7 @@ const {
   seedAttendances,
 } = require("./seed");
 
-const fs = require("fs");
+
 const path = require("path");
 
 const SCHEMA_PATH = path.join(__dirname, "schema.sql");
