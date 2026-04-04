@@ -1,8 +1,10 @@
+﻿const { createPasswordHash } = require("./auth");
+
 const seedUsers = [
   {
     nombre: "Administrador General",
     email: "admin@iglesia.com",
-    password: "admin123",
+    passwordHash: createPasswordHash("admin123"),
     fechaCumpleanos: "1990-04-12",
     role: "admin",
     estado: "activo",
@@ -10,7 +12,7 @@ const seedUsers = [
   {
     nombre: "Supervisora Escuela",
     email: "supervisora@iglesia.com",
-    password: "super123",
+    passwordHash: createPasswordHash("super123"),
     fechaCumpleanos: "1988-05-03",
     role: "supervisor",
     estado: "activo",

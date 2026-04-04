@@ -1,6 +1,6 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const { pool } = require("./config/db");
-const { createPasswordHash, isPasswordHashed } = require("./auth");
+const { isPasswordHashed } = require("./auth");
 const {
   seedUsers,
   seedMaestros,
@@ -10,6 +10,7 @@ const {
 
 
 const path = require("path");
+const { buildPagination, paginate } = require("./middleware/pagination");
 
 const SCHEMA_PATH = path.join(__dirname, "../sql/schema.sql");
 
@@ -101,7 +102,7 @@ async function seedDatabase() {
     for (const user of seedUsers) {
       await query(
         "INSERT INTO users (nombre, email, password, fecha_cumpleanos, role, estado) VALUES ($1, $2, $3, $4, $5, $6)",
-        [user.nombre, user.email, createPasswordHash(user.password), user.fechaCumpleanos || null, user.role, user.estado],
+        [user.nombre, user.email, user.passwordHash, user.fechaCumpleanos || null, user.role, user.estado],
       );
     }
   }
@@ -186,11 +187,31 @@ async function seedDatabase() {
   }
 }
 
-async function getUsers() {
+async function getUsers(params = {}) {
+  const { limit, offset, page } = buildPagination(params);
+  const conditions = [];
+  const values = [];
+  let idx = 1;
+
+  if (params.estado) {
+    conditions.push(`estado = $${idx++}`);
+    values.push(params.estado);
+  }
+  if (params.search) {
+    conditions.push(`(nombre ILIKE $${idx} OR email ILIKE $${idx})`);
+    values.push(`%${params.search}%`);
+    idx += 1;
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const countResult = await query(`SELECT COUNT(*)::int AS total FROM users ${where}`, values);
+  const total = countResult.rows[0].total;
+
   const result = await query(
-    "SELECT id, nombre, email, fecha_cumpleanos, role, estado, creado_en FROM users ORDER BY nombre ASC",
+    `SELECT id, nombre, email, fecha_cumpleanos, role, estado, creado_en FROM users ${where} ORDER BY nombre ASC LIMIT $${idx++} OFFSET $${idx++}`,
+    [...values, limit, offset],
   );
-  return result.rows.map(mapUser);
+  return paginate(result.rows.map(mapUser), page, limit, total);
 }
 
 async function getUserById(id) {
@@ -316,15 +337,22 @@ async function listMaestros(filters = {}) {
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const { limit, offset, page } = buildPagination(filters);
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS total FROM maestros ${whereClause}`,
+    params,
+  );
+  const total = countResult.rows[0].total;
+
   const result = await query(
     `SELECT id, nombre, telefono, email, fecha_cumpleanos, grupo, turno, estado, creado_en
      FROM maestros
      ${whereClause}
-     ORDER BY nombre ASC`,
-    params,
+     ORDER BY nombre ASC LIMIT $${index++} OFFSET $${index++}`,
+    [...params, limit, offset],
   );
 
-  return result.rows.map(mapMaestro);
+  return paginate(result.rows.map(mapMaestro), page, limit, total);
 }
 
 async function getMaestroById(id) {
@@ -405,6 +433,13 @@ async function listNinos(filters = {}) {
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const { limit, offset, page } = buildPagination(filters);
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS total FROM ninos ${whereClause}`,
+    params,
+  );
+  const total = countResult.rows[0].total;
+
   const result = await query(
     `SELECT
        id,
@@ -419,11 +454,11 @@ async function listNinos(filters = {}) {
        creado_en
      FROM ninos
      ${whereClause}
-     ORDER BY nombre ASC`,
-    params,
+     ORDER BY nombre ASC LIMIT $${index++} OFFSET $${index++}`,
+    [...params, limit, offset],
   );
 
-  return result.rows.map(mapNino);
+  return paginate(result.rows.map(mapNino), page, limit, total);
 }
 
 async function getNinoById(id) {
@@ -912,3 +947,5 @@ module.exports = {
   getAdvancedReports,
   query,
 };
+
+

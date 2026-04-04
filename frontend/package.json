@@ -1,5 +1,5 @@
-{
-  "name": "vite_react_shadcn_ts",
+﻿{
+  "name": "church-connect-hub-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -87,3 +87,4 @@
     "vitest": "^3.2.4"
   }
 }
+

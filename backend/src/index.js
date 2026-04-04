@@ -1,34 +1,6 @@
-const http = require("http");
-const { PORT, HOST, DATABASE_URL } = require("./config");
-const {
-  pool,
-  initializeDatabase,
-  getUsers,
-  getUserById,
-  findUserById,
-  findUserByEmail,
-  createUser,
-  updateUser,
-  updateUserPassword,
-  deleteUser,
-  listMaestros,
-  getMaestroById,
-  createMaestro,
-  updateMaestro,
-  deleteMaestro,
-  listNinos,
-  getNinoById,
-  createNino,
-  updateNino,
-  deleteNino,
-  listAttendances,
-  listTeacherAttendances,
-  upsertAttendance,
-  upsertTeacherAttendance,
-  getDashboardSummary,
-  getAttendanceReport,
-  getAdvancedReports,
-} = require("./db");
+﻿const http = require("http");
+const { PORT, HOST } = require("./config");
+const { pool, initializeDatabase, getDashboardSummary, getAttendanceReport, getAdvancedReports } = require("./db");
 const {
   getNotificationSettings,
   updateNotificationSettings,
@@ -39,115 +11,70 @@ const {
 } = require("./reminders");
 const { getCatalogSettings, updateCatalogSettings } = require("./catalogs");
 const { buildRolePermissions, getPermissionsForRole } = require("./permissions");
-const {
-  createPasswordHash,
-  verifyPassword,
-  sanitizeUser,
-  createSessionToken,
-  verifySessionToken,
-  getBearerToken,
-} = require("./auth");
-const { readJsonBody, sendJson, sendNoContent, parseId } = require("./http");
+const { verifySessionToken, getBearerToken } = require("./auth");
+const { sendJson } = require("./http");
 
-function normalizeTurno(turno) {
-  if (!turno) {
-    return null;
-  }
+// Middleware
+const { buildCorsMiddleware } = require("./middleware/cors");
+const { rateLimit } = require("./middleware/rateLimit");
+const { logger, getSanitizedError } = require("./middleware/logger");
 
-  if (turno === "mañana") {
-    return "manana";
-  }
+// Routes
+const { handleLogin } = require("./routes/auth");
+const { handleGetUsers, handleGetUser, handleCreateUser, handleUpdateUser, handleDeleteUser } = require("./routes/users");
+const { handleList: handleListMaestros, handleGet: handleGetMaestro, handleCreate: handleCreateMaestro, handleUpdate: handleUpdateMaestro, handleDelete: handleDeleteMaestro } = require("./routes/maestros");
+const { handleList: handleListNinos, handleGet: handleGetNino, handleCreate: handleCreateNino, handleUpdate: handleUpdateNino, handleDelete: handleDeleteNino } = require("./routes/ninos");
+const { handleListAttendances, handleSaveAttendance, handleListTeacherAttendances, handleSaveTeacherAttendance } = require("./routes/asistencia");
 
-  return turno;
-}
-
-function validateRequiredFields(payload, requiredFields) {
-  return requiredFields.filter((field) => {
-    const value = payload[field];
-    return value === undefined || value === null || value === "";
-  });
-}
-
-function buildQueryFilters(url) {
-  return {
-    estado: url.searchParams.get("estado") || undefined,
-    turno: normalizeTurno(url.searchParams.get("turno")) || undefined,
-    grupo: url.searchParams.get("grupo") || undefined,
-    search: url.searchParams.get("search") || undefined,
-    fecha: url.searchParams.get("fecha") || undefined,
-  };
-}
+// ── Auth helpers ──────────────────────────────────────────
 
 async function authenticateRequest(req, res) {
   const token = getBearerToken(req);
   const session = verifySessionToken(token);
+  if (!session) { sendJson(res, 401, { error: "Sesion invalida o expirada." }); return null; }
 
-  if (!session) {
-    sendJson(res, 401, { error: "Sesion invalida o expirada." });
-    return null;
-  }
-
+  const { findUserById } = require("./db");
   const user = await findUserById(session.sub);
-  if (!user || user.estado === "inactivo") {
-    sendJson(res, 401, { error: "Usuario no autorizado." });
-    return null;
-  }
+  if (!user || user.estado === "inactivo") { sendJson(res, 401, { error: "Usuario no autorizado." }); return null; }
 
-  return {
-    session,
-    user,
-    permissions: getPermissionsForRole(user.role).permissions,
-  };
+  return { session, user, permissions: getPermissionsForRole(user.role).permissions };
 }
 
-function hasPermission(auth, permission) {
-  return auth.permissions.includes(permission);
-}
+function hasPermission(auth, permission) { return auth.permissions.includes(permission); }
 
 async function requirePermission(req, res, permission) {
   const auth = await authenticateRequest(req, res);
-  if (!auth) {
-    return null;
-  }
-
-  if (!hasPermission(auth, permission)) {
-    sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." });
-    return null;
-  }
-
+  if (!auth) return null;
+  if (!hasPermission(auth, permission)) { sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." }); return null; }
   return auth;
 }
 
 async function requireAnyPermission(req, res, permissions) {
   const auth = await authenticateRequest(req, res);
-  if (!auth) {
-    return null;
-  }
-
-  if (!permissions.some((permission) => hasPermission(auth, permission))) {
-    sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." });
-    return null;
-  }
-
+  if (!auth) return null;
+  if (!permissions.some((p) => hasPermission(auth, p))) { sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." }); return null; }
   return auth;
 }
 
+// ── Router ────────────────────────────────────────────────
+
+const cors = buildCorsMiddleware();
+
 const server = http.createServer(async (req, res) => {
+  // Global middleware
+  cors(req, res, () => {});
+  logger(req, res, () => {});
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
 
-  if (req.method === "OPTIONS") {
-    sendNoContent(res);
-    return;
-  }
-
   try {
+    // Health
     if (pathname === "/" && req.method === "GET") {
       sendJson(res, 200, {
         service: "church-connect-hub-backend",
         status: "running",
         database: "postgresql",
-        databaseUrl: DATABASE_URL,
         endpoints: [
           "GET /health",
           "POST /api/auth/login",
@@ -172,514 +99,253 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === "/health" && req.method === "GET") {
       await pool.query("SELECT 1");
-      sendJson(res, 200, {
-        status: "ok",
-        service: "church-connect-hub-backend",
-        database: "connected",
-      });
+      sendJson(res, 200, { status: "ok", service: "church-connect-hub-backend", database: "connected" });
       return;
     }
 
-    if (pathname === "/api/users" && req.method === "GET") {
-      const auth = await requirePermission(req, res, "users.manage");
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await getUsers());
-      return;
-    }
-
-    if (pathname === "/api/users" && req.method === "POST") {
-      const auth = await requirePermission(req, res, "users.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      const missing = validateRequiredFields(payload, ["nombre", "email", "password", "role"]);
-
-      if (missing.length > 0) {
-        sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-        return;
-      }
-
-      sendJson(res, 201, await createUser(payload));
-      return;
-    }
-
-    if (pathname.startsWith("/api/users/")) {
-      const id = parseId(pathname);
-      if (!id) {
-        sendJson(res, 400, { error: "Id invalido" });
-        return;
-      }
-
-      if (req.method === "GET") {
-        const auth = await requirePermission(req, res, "users.manage");
-        if (!auth) {
-          return;
-        }
-        const user = await getUserById(id);
-        if (!user) {
-          sendJson(res, 404, { error: "Usuario no encontrado" });
-          return;
-        }
-
-        sendJson(res, 200, user);
-        return;
-      }
-
-      if (req.method === "PUT") {
-        const auth = await requirePermission(req, res, "users.manage");
-        if (!auth) {
-          return;
-        }
-        const user = await getUserById(id);
-        if (!user) {
-          sendJson(res, 404, { error: "Usuario no encontrado" });
-          return;
-        }
-
-        const payload = await readJsonBody(req);
-        const missing = validateRequiredFields(payload, ["nombre", "email", "role"]);
-
-        if (missing.length > 0) {
-          sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-          return;
-        }
-
-        sendJson(res, 200, await updateUser(id, payload));
-        return;
-      }
-
-      if (req.method === "DELETE") {
-        const auth = await requirePermission(req, res, "users.manage");
-        if (!auth) {
-          return;
-        }
-        const deleted = await deleteUser(id);
-        if (!deleted) {
-          sendJson(res, 404, { error: "Usuario no encontrado" });
-          return;
-        }
-
-        sendJson(res, 200, { message: "Usuario eliminado" });
-        return;
-      }
-    }
-
+    // ── Auth (with rate limiting) ──
     if (pathname === "/api/auth/login" && req.method === "POST") {
-      const payload = await readJsonBody(req);
-      const missing = validateRequiredFields(payload, ["email", "password"]);
-
-      if (missing.length > 0) {
-        sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-        return;
-      }
-
-      const user = await findUserByEmail(payload.email);
-      if (!user || user.estado === "inactivo" || !verifyPassword(payload.password, user.password)) {
-        sendJson(res, 401, { error: "Credenciales invalidas" });
-        return;
-      }
-
-      if (user.password === payload.password) {
-        await updateUserPassword(user.id, createPasswordHash(payload.password));
-      }
-
-      const safeUser = sanitizeUser(user);
-
-      sendJson(res, 200, {
-        message: "Login exitoso",
-        token: createSessionToken(user),
-        user: safeUser,
-      });
+      await rateLimit(req, res, () => {});
+      if (res.headersSent) return;
+      await handleLogin(req, res);
       return;
     }
 
+    // ── Dashboard ──
     if (pathname === "/api/dashboard" && req.method === "GET") {
       const auth = await requirePermission(req, res, "dashboard.view");
-      if (!auth) {
-        return;
-      }
+      if (!auth) return;
       sendJson(res, 200, await getDashboardSummary());
       return;
     }
 
-    if (pathname === "/api/config/notificaciones" && req.method === "GET") {
-      const auth = await requirePermission(req, res, "settings.manage");
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await getNotificationSettings());
+    // ── Users ──
+    if (pathname === "/api/users" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) return;
+      await handleGetUsers(req, res, auth);
+      return;
+    }
+    if (pathname === "/api/users" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) return;
+      await handleCreateUser(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/users/") && req.method === "GET") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) return;
+      await handleGetUser(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/users/") && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) return;
+      await handleUpdateUser(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/users/") && req.method === "DELETE") {
+      const auth = await requirePermission(req, res, "users.manage");
+      if (!auth) return;
+      await handleDeleteUser(req, res, auth);
       return;
     }
 
-    if (pathname === "/api/config/notificaciones" && req.method === "PUT") {
-      const auth = await requirePermission(req, res, "settings.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      sendJson(res, 200, await updateNotificationSettings(payload));
-      return;
-    }
-
-    if (pathname === "/api/config/catalogos" && req.method === "GET") {
-      const auth = await requirePermission(req, res, "settings.manage");
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await getCatalogSettings());
-      return;
-    }
-
-    if (pathname === "/api/config/catalogos" && req.method === "PUT") {
-      const auth = await requirePermission(req, res, "settings.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      sendJson(res, 200, await updateCatalogSettings(payload));
-      return;
-    }
-
-    if (pathname === "/api/permisos/roles" && req.method === "GET") {
-      const auth = await authenticateRequest(req, res);
-      if (!auth) {
-        return;
-      }
-      const catalogs = await getCatalogSettings();
-      sendJson(res, 200, buildRolePermissions(catalogs.roles));
-      return;
-    }
-
-    if (pathname === "/api/notificaciones/app" && req.method === "GET") {
-      const auth = await requirePermission(req, res, "dashboard.view");
-      if (!auth) {
-        return;
-      }
-      const limit = Number(url.searchParams.get("limit") || 6);
-      sendJson(res, 200, await listAppNotifications(limit));
-      return;
-    }
-
-    if (pathname === "/api/cumpleanos/proximos" && req.method === "GET") {
-      const auth = await requirePermission(req, res, "dashboard.view");
-      if (!auth) {
-        return;
-      }
-      const days = Number(url.searchParams.get("days") || 30);
-      sendJson(res, 200, await listUpcomingBirthdays(days));
-      return;
-    }
-
-    if (pathname === "/api/cumpleanos/sync-calendar" && req.method === "POST") {
-      const auth = await requirePermission(req, res, "settings.manage");
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await syncBirthdayCalendarEvents());
-      return;
-    }
-
+    // ── Maestros ──
     if (pathname === "/api/maestros" && req.method === "GET") {
       const auth = await requireAnyPermission(req, res, ["maestros.manage", "attendance.manage"]);
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await listMaestros(buildQueryFilters(url)));
+      if (!auth) return;
+      await handleListMaestros(req, res, auth);
       return;
     }
-
     if (pathname === "/api/maestros" && req.method === "POST") {
       const auth = await requirePermission(req, res, "maestros.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      payload.turno = normalizeTurno(payload.turno);
-      const missing = validateRequiredFields(payload, ["nombre", "turno"]);
-
-      if (missing.length > 0) {
-        sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-        return;
-      }
-
-      sendJson(res, 201, await createMaestro(payload));
+      if (!auth) return;
+      await handleCreateMaestro(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/maestros/") && req.method === "GET") {
+      const auth = await requireAnyPermission(req, res, ["maestros.manage", "attendance.manage"]);
+      if (!auth) return;
+      await handleGetMaestro(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/maestros/") && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "maestros.manage");
+      if (!auth) return;
+      await handleUpdateMaestro(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/maestros/") && req.method === "DELETE") {
+      const auth = await requirePermission(req, res, "maestros.manage");
+      if (!auth) return;
+      await handleDeleteMaestro(req, res, auth);
       return;
     }
 
-    if (pathname.startsWith("/api/maestros/")) {
-      const id = parseId(pathname);
-      if (!id) {
-        sendJson(res, 400, { error: "Id invalido" });
-        return;
-      }
-
-      if (req.method === "GET") {
-        const auth = await requireAnyPermission(req, res, ["maestros.manage", "attendance.manage"]);
-        if (!auth) {
-          return;
-        }
-        const maestro = await getMaestroById(id);
-        if (!maestro) {
-          sendJson(res, 404, { error: "Maestro no encontrado" });
-          return;
-        }
-
-        sendJson(res, 200, maestro);
-        return;
-      }
-
-      if (req.method === "PUT") {
-        const auth = await requirePermission(req, res, "maestros.manage");
-        if (!auth) {
-          return;
-        }
-        const maestro = await getMaestroById(id);
-        if (!maestro) {
-          sendJson(res, 404, { error: "Maestro no encontrado" });
-          return;
-        }
-
-        const payload = await readJsonBody(req);
-        payload.turno = normalizeTurno(payload.turno);
-        const missing = validateRequiredFields(payload, ["nombre", "turno"]);
-
-        if (missing.length > 0) {
-          sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-          return;
-        }
-
-        sendJson(res, 200, await updateMaestro(id, payload));
-        return;
-      }
-
-      if (req.method === "DELETE") {
-        const auth = await requirePermission(req, res, "maestros.manage");
-        if (!auth) {
-          return;
-        }
-        const deleted = await deleteMaestro(id);
-        if (!deleted) {
-          sendJson(res, 404, { error: "Maestro no encontrado" });
-          return;
-        }
-
-        sendJson(res, 200, { message: "Maestro eliminado" });
-        return;
-      }
-    }
-
+    // ── Ninos ──
     if (pathname === "/api/ninos" && req.method === "GET") {
       const auth = await requireAnyPermission(req, res, ["ninos.manage", "attendance.manage"]);
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await listNinos(buildQueryFilters(url)));
+      if (!auth) return;
+      await handleListNinos(req, res, auth);
       return;
     }
-
     if (pathname === "/api/ninos" && req.method === "POST") {
       const auth = await requirePermission(req, res, "ninos.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      payload.turno = normalizeTurno(payload.turno);
-      const missing = validateRequiredFields(payload, ["nombre", "fechaNacimiento", "grupo", "turno"]);
-
-      if (missing.length > 0) {
-        sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-        return;
-      }
-
-      sendJson(res, 201, await createNino(payload));
+      if (!auth) return;
+      await handleCreateNino(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/ninos/") && req.method === "GET") {
+      const auth = await requireAnyPermission(req, res, ["ninos.manage", "attendance.manage"]);
+      if (!auth) return;
+      await handleGetNino(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/ninos/") && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "ninos.manage");
+      if (!auth) return;
+      await handleUpdateNino(req, res, auth);
+      return;
+    }
+    if (pathname.startsWith("/api/ninos/") && req.method === "DELETE") {
+      const auth = await requirePermission(req, res, "ninos.manage");
+      if (!auth) return;
+      await handleDeleteNino(req, res, auth);
       return;
     }
 
-    if (pathname.startsWith("/api/ninos/")) {
-      const id = parseId(pathname);
-      if (!id) {
-        sendJson(res, 400, { error: "Id invalido" });
-        return;
-      }
-
-      if (req.method === "GET") {
-        const auth = await requireAnyPermission(req, res, ["ninos.manage", "attendance.manage"]);
-        if (!auth) {
-          return;
-        }
-        const nino = await getNinoById(id);
-        if (!nino) {
-          sendJson(res, 404, { error: "Nino no encontrado" });
-          return;
-        }
-
-        sendJson(res, 200, nino);
-        return;
-      }
-
-      if (req.method === "PUT") {
-        const auth = await requirePermission(req, res, "ninos.manage");
-        if (!auth) {
-          return;
-        }
-        const nino = await getNinoById(id);
-        if (!nino) {
-          sendJson(res, 404, { error: "Nino no encontrado" });
-          return;
-        }
-
-        const payload = await readJsonBody(req);
-        payload.turno = normalizeTurno(payload.turno);
-        const missing = validateRequiredFields(payload, ["nombre", "fechaNacimiento", "grupo", "turno"]);
-
-        if (missing.length > 0) {
-          sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-          return;
-        }
-
-        sendJson(res, 200, await updateNino(id, payload));
-        return;
-      }
-
-      if (req.method === "DELETE") {
-        const auth = await requirePermission(req, res, "ninos.manage");
-        if (!auth) {
-          return;
-        }
-        const deleted = await deleteNino(id);
-        if (!deleted) {
-          sendJson(res, 404, { error: "Nino no encontrado" });
-          return;
-        }
-
-        sendJson(res, 200, { message: "Nino eliminado" });
-        return;
-      }
-    }
-
+    // ── Asistencia ninos ──
     if (pathname === "/api/asistencias" && req.method === "GET") {
       const auth = await requirePermission(req, res, "attendance.manage");
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await listAttendances(buildQueryFilters(url)));
+      if (!auth) return;
+      await handleListAttendances(req, res, auth);
       return;
     }
-
     if (pathname === "/api/asistencias" && req.method === "POST") {
       const auth = await requirePermission(req, res, "attendance.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      payload.turno = normalizeTurno(payload.turno);
-      const missing = validateRequiredFields(payload, ["fecha", "turno", "ninoId", "registradoPor"]);
-
-      if (missing.length > 0) {
-        sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-        return;
-      }
-
-      sendJson(
-        res,
-        200,
-        await upsertAttendance({
-          fecha: payload.fecha,
-          turno: payload.turno,
-          ninoId: Number(payload.ninoId),
-          maestroId: payload.maestroId ? Number(payload.maestroId) : null,
-          presente: Boolean(payload.presente),
-          maestroPresente: Boolean(payload.maestroPresente),
-          registradoPor: auth.user.email,
-        }),
-      );
+      if (!auth) return;
+      await handleSaveAttendance(req, res, auth);
       return;
     }
 
+    // ── Asistencia maestros ──
     if (pathname === "/api/asistencias-maestros" && req.method === "GET") {
       const auth = await requirePermission(req, res, "attendance.manage");
-      if (!auth) {
-        return;
-      }
-      sendJson(res, 200, await listTeacherAttendances(buildQueryFilters(url)));
+      if (!auth) return;
+      await handleListTeacherAttendances(req, res, auth);
       return;
     }
-
     if (pathname === "/api/asistencias-maestros" && req.method === "POST") {
       const auth = await requirePermission(req, res, "attendance.manage");
-      if (!auth) {
-        return;
-      }
-      const payload = await readJsonBody(req);
-      payload.turno = normalizeTurno(payload.turno);
-      const missing = validateRequiredFields(payload, ["fecha", "turno", "maestroId", "registradoPor"]);
-
-      if (missing.length > 0) {
-        sendJson(res, 400, { error: "Faltan campos requeridos", fields: missing });
-        return;
-      }
-
-      sendJson(
-        res,
-        200,
-        await upsertTeacherAttendance({
-          fecha: payload.fecha,
-          turno: payload.turno,
-          maestroId: Number(payload.maestroId),
-          presente: Boolean(payload.presente),
-          registradoPor: auth.user.email,
-        }),
-      );
+      if (!auth) return;
+      await handleSaveTeacherAttendance(req, res, auth);
       return;
     }
 
+    // ── Reportes ──
     if (pathname === "/api/reportes/asistencia" && req.method === "GET") {
       const auth = await requirePermission(req, res, "reports.view");
-      if (!auth) {
-        return;
-      }
+      if (!auth) return;
       const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
       sendJson(res, 200, await getAttendanceReport(month));
       return;
     }
-
     if (pathname === "/api/reportes/avanzados" && req.method === "GET") {
       const auth = await requirePermission(req, res, "reports.view");
-      if (!auth) {
-        return;
-      }
+      if (!auth) return;
       const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
       sendJson(res, 200, await getAdvancedReports(month));
       return;
     }
 
+    // ── Configuracion ──
+    if (pathname === "/api/config/notificaciones" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) return;
+      sendJson(res, 200, await getNotificationSettings());
+      return;
+    }
+    if (pathname === "/api/config/notificaciones" && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) return;
+      const { readJsonBody } = require("./http");
+      const payload = await readJsonBody(req);
+      sendJson(res, 200, await updateNotificationSettings(payload));
+      return;
+    }
+    if (pathname === "/api/config/catalogos" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) return;
+      sendJson(res, 200, await getCatalogSettings());
+      return;
+    }
+    if (pathname === "/api/config/catalogos" && req.method === "PUT") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) return;
+      const { readJsonBody } = require("./http");
+      const payload = await readJsonBody(req);
+      sendJson(res, 200, await updateCatalogSettings(payload));
+      return;
+    }
+
+    // ── Permisos ──
+    if (pathname === "/api/permisos/roles" && req.method === "GET") {
+      const auth = await authenticateRequest(req, res);
+      if (!auth) return;
+      const catalogs = await getCatalogSettings();
+      sendJson(res, 200, buildRolePermissions(catalogs.roles));
+      return;
+    }
+
+    // ── Notificaciones ──
+    if (pathname === "/api/notificaciones/app" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "dashboard.view");
+      if (!auth) return;
+      const limit = Number(url.searchParams.get("limit") || 6);
+      sendJson(res, 200, await listAppNotifications(limit));
+      return;
+    }
+
+    // ── Cumpleanos ──
+    if (pathname === "/api/cumpleanos/proximos" && req.method === "GET") {
+      const auth = await requirePermission(req, res, "dashboard.view");
+      if (!auth) return;
+      const days = Number(url.searchParams.get("days") || 30);
+      sendJson(res, 200, await listUpcomingBirthdays(days));
+      return;
+    }
+    if (pathname === "/api/cumpleanos/sync-calendar" && req.method === "POST") {
+      const auth = await requirePermission(req, res, "settings.manage");
+      if (!auth) return;
+      sendJson(res, 200, await syncBirthdayCalendarEvents());
+      return;
+    }
+
+    // 404
     sendJson(res, 404, { error: "Ruta no encontrada" });
   } catch (error) {
     if (error instanceof SyntaxError) {
       sendJson(res, 400, { error: "JSON invalido" });
       return;
     }
-
     if (error.code === "23505") {
       sendJson(res, 409, { error: "Ya existe un registro con ese valor unico" });
       return;
     }
-
-    sendJson(res, 500, {
-      error: "Error interno del servidor",
-      detail: error.message,
-    });
+    console.error("[ERROR]", error);
+    sendJson(res, 500, getSanitizedError(error));
   }
 });
+
+// ── Startup ───────────────────────────────────────────────
 
 initializeDatabase()
   .then(() => {
     scheduleDailyBirthdayReminderRefresh();
     server.listen(PORT, HOST, () => {
       console.log(`Backend corriendo en http://${HOST}:${PORT}`);
+      console.log(`CORS orígenes permitidos: ${process.env.CORS_ORIGINS || "*"}`);
     });
   })
   .catch((error) => {
