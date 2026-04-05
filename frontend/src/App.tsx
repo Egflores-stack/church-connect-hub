@@ -1,8 +1,9 @@
-﻿import { Toaster } from "@/components/ui/toaster";
+﻿import { useEffect } from "react";
+import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { clearAuthSession, getAuthUser } from "./lib/auth";
 import DashboardPage from "./pages/DashboardPage";
@@ -19,25 +20,21 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const navigate = useNavigate();
   const user = getAuthUser();
 
   if (!user) {
     clearAuthSession();
-    navigate("/login", { replace: true });
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
 }
 
 function RequireGuest({ children }: { children: React.ReactNode }) {
-  const navigate = useNavigate();
   const user = getAuthUser();
 
   if (user) {
-    navigate("/", { replace: true });
-    return null;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
