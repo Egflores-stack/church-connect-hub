@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Baby, Users, ClipboardCheck, Cake, TrendingUp, Calendar, BellRing } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { StatCard } from "@/components/shared/StatCard";
@@ -47,7 +47,7 @@ export default function DashboardPage() {
       try {
         const [dashboardData, ninosData, notificationsData] = await Promise.all([
           getDashboard(),
-          getNinos(),
+          getNinos({ estado: "activo" }),
           getAppNotifications(4),
         ]);
         if (!mounted) {
@@ -225,3 +225,4 @@ export default function DashboardPage() {
     </AppLayout>
   );
 }
+

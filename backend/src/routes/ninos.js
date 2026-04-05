@@ -61,6 +61,13 @@ async function handleUpdate(req, res) {
   const required = validateRequired(payload, ["nombre", "fechaNacimiento", "grupo", "turno"]);
   if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
   if (!validateDate(payload.fechaNacimiento)) { sendJson(res, 400, { error: "Fecha de nacimiento invalida (YYYY-MM-DD)" }); return; }
+
+  // Recalculate birthday notifications if estado changed
+  if (payload.estado && n.estado !== payload.estado) {
+    const { recalculateAppBirthdayNotifications } = require("../reminders");
+    recalculateAppBirthdayNotifications().catch(() => {});
+  }
+
   sendJson(res, 200, await updateNino(id, payload));
 }
 

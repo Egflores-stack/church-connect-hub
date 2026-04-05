@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+﻿import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Baby,
   Church,
@@ -32,7 +32,7 @@ export function AppSidebar() {
 
   function handleLogout() {
     clearAuthSession();
-    navigate("/login");
+    window.location.href = "/login";
   }
 
   return (
@@ -89,3 +89,4 @@ export function AppSidebar() {
     </aside>
   );
 }
+

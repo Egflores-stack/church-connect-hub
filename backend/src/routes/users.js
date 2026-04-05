@@ -7,6 +7,7 @@
 } = require("../db");
 const { readJsonBody, sendJson, parseId } = require("../http");
 const { validateRequired, validateEmail, validatePassword } = require("../middleware/validator");
+const { recalculateAppBirthdayNotifications } = require("../reminders");
 
 async function handleGetUsers(req, res, auth) {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -48,7 +49,19 @@ async function handleUpdateUser(req, res) {
   const required = validateRequired(payload, ["nombre", "email", "role"]);
   if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
   if (!validateEmail(payload.email)) { sendJson(res, 400, { error: "Correo invalido" }); return; }
-  sendJson(res, 200, await updateUser(id, payload));
+
+  const oldUser = await getUserById(id);
+  const result = await updateUser(id, payload);
+
+  // Recalculate birthday notifications if estado or fechaCumpleanos changed
+  if (
+    (payload.estado && oldUser && oldUser.estado !== payload.estado) ||
+    payload.fechaCumpleanos
+  ) {
+    recalculateAppBirthdayNotifications().catch(() => {});
+  }
+
+  sendJson(res, 200, result);
 }
 
 async function handleDeleteUser(req, res) {
@@ -57,6 +70,11 @@ async function handleDeleteUser(req, res) {
 
   const deleted = await deleteUser(id);
   if (!deleted) { sendJson(res, 404, { error: "Usuario no encontrado" }); return; }
+
+  // Remove birthday notifications for deleted user
+  const { query } = require("../db");
+  await query("DELETE FROM app_notifications WHERE entity_type = 'staff' AND entity_id = $1", [id]);
+
   sendJson(res, 200, { message: "Usuario eliminado" });
 }
 

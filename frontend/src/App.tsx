@@ -2,9 +2,9 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { hasPermission, isAuthenticated } from "./lib/auth";
+import { clearAuthSession, getAuthUser } from "./lib/auth";
 import DashboardPage from "./pages/DashboardPage";
 import IngresoDatosPage from "./pages/IngresoDatosPage";
 import LoginPage from "./pages/LoginPage";
@@ -18,6 +18,31 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const user = getAuthUser();
+
+  if (!user) {
+    clearAuthSession();
+    navigate("/login", { replace: true });
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
+function RequireGuest({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const user = getAuthUser();
+
+  if (user) {
+    navigate("/", { replace: true });
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -26,16 +51,16 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={isAuthenticated() ? <Navigate to="/" replace /> : <LoginPage />} />
-            <Route path="/" element={isAuthenticated() ? <DashboardPage /> : <Navigate to="/login" replace />} />
-            <Route path="/ingreso-datos" element={isAuthenticated() ? <IngresoDatosPage /> : <Navigate to="/login" replace />} />
-            <Route path="/maestros" element={isAuthenticated() ? <MaestrosPage /> : <Navigate to="/login" replace />} />
-            <Route path="/ninos" element={isAuthenticated() ? <NinosPage /> : <Navigate to="/login" replace />} />
-            <Route path="/asistencia" element={isAuthenticated() ? <AsistenciaPage /> : <Navigate to="/login" replace />} />
-            <Route path="/reportes" element={isAuthenticated() ? <ReportesPage /> : <Navigate to="/login" replace />} />
-            <Route path="/usuarios" element={isAuthenticated() && hasPermission("users.manage") ? <UsuariosPage /> : <Navigate to="/" replace />} />
-            <Route path="/parametrizacion" element={isAuthenticated() ? <ConfiguracionPage /> : <Navigate to="/login" replace />} />
-            <Route path="/configuracion" element={isAuthenticated() ? <ConfiguracionPage /> : <Navigate to="/login" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="/ingreso-datos" element={<RequireAuth><IngresoDatosPage /></RequireAuth>} />
+            <Route path="/maestros" element={<RequireAuth><MaestrosPage /></RequireAuth>} />
+            <Route path="/ninos" element={<RequireAuth><NinosPage /></RequireAuth>} />
+            <Route path="/asistencia" element={<RequireAuth><AsistenciaPage /></RequireAuth>} />
+            <Route path="/reportes" element={<RequireAuth><ReportesPage /></RequireAuth>} />
+            <Route path="/usuarios" element={<RequireAuth><UsuariosPage /></RequireAuth>} />
+            <Route path="/parametrizacion" element={<RequireAuth><ConfiguracionPage /></RequireAuth>} />
+            <Route path="/configuracion" element={<RequireAuth><ConfiguracionPage /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -45,4 +70,3 @@ const App = () => (
 );
 
 export default App;
-

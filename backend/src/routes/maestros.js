@@ -60,8 +60,17 @@ async function handleUpdate(req, res) {
   const required = validateRequired(payload, ["nombre", "turno"]);
   if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
   if (payload.estado && !validateEnum(payload.estado, ["activo", "inactivo"])) {
-    sendJson(res, 400, { error: "Estado debe ser 'activo' o 'inactivo'" }); return;
+    sendJson(res, 400, { error: "Estado debe ser 'activo' o 'inactivo'" }); return; }
+
+  // Recalculate birthday notifications if estado or fechaCumpleanos changed
+  if (
+    (payload.estado && m.estado !== payload.estado) ||
+    payload.fechaCumpleanos
+  ) {
+    const { recalculateAppBirthdayNotifications } = require("../reminders");
+    recalculateAppBirthdayNotifications().catch(() => {});
   }
+
   sendJson(res, 200, await updateMaestro(id, payload));
 }
 
@@ -70,6 +79,11 @@ async function handleDelete(req, res) {
   if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
   const deleted = await deleteMaestro(id);
   if (!deleted) { sendJson(res, 404, { error: "Maestro no encontrado" }); return; }
+
+  // Remove birthday notifications for deleted maestro
+  const { query } = require("../db");
+  await query("DELETE FROM app_notifications WHERE entity_type = 'maestro' AND entity_id = $1", [id]);
+
   sendJson(res, 200, { message: "Maestro eliminado" });
 }
 
