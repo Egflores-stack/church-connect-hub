@@ -16,7 +16,7 @@ import type {
 import { clearAuthSession, getAuthToken } from "./auth";
 
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 function buildApiUrl(path: string) {
   const normalizedPath =
@@ -53,13 +53,29 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: any = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
 
   if (!response.ok) {
     if (response.status === 401) {
       clearAuthSession();
     }
-    throw new ApiError(data?.error || "Error en la solicitud", response.status);
+    const message =
+      typeof data === "string"
+        ? data.slice(0, 160)
+        : data?.error || "Error en la solicitud";
+    throw new ApiError(message, response.status);
+  }
+
+  if (text && data === text) {
+    throw new ApiError("Respuesta invalida del servidor. Se esperaba JSON.", response.status);
   }
 
   return data as T;
