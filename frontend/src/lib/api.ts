@@ -16,7 +16,21 @@ import type {
 import { clearAuthSession, getAuthToken } from "./auth";
 
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
+function buildApiUrl(path: string) {
+  const normalizedPath =
+    path === "/api"
+      ? ""
+      : path.startsWith("/api/")
+        ? path.slice(4)
+        : path.startsWith("/")
+          ? path
+          : `/${path}`;
+
+  const base = API_BASE_URL.replace(/\/$/, "");
+  return `${base}${normalizedPath}`;
+}
 
 class ApiError extends Error {
   status: number;
@@ -29,7 +43,7 @@ class ApiError extends Error {
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(buildApiUrl(path), {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
