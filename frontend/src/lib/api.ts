@@ -19,16 +19,17 @@ import { clearAuthSession, getAuthToken } from "./auth";
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 function buildApiUrl(path: string) {
-  const normalizedPath =
-    path === "/api"
-      ? ""
-      : path.startsWith("/api/")
-        ? path.slice(4)
-        : path.startsWith("/")
-          ? path
-          : `/${path}`;
-
   const base = API_BASE_URL.replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (!base) {
+    return normalizedPath;
+  }
+
+  if (base.endsWith("/api") && normalizedPath.startsWith("/api/")) {
+    return `${base}${normalizedPath.slice(4)}`;
+  }
+
   return `${base}${normalizedPath}`;
 }
 
