@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, FileBarChart, TriangleAlert, Users } from "lucide-react";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -22,22 +23,27 @@ export default function ReportesPage() {
   const [mes, setMes] = useState(new Date().toISOString().slice(5, 7));
   const [report, setReport] = useState<AdvancedReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const currentYear = String(new Date().getFullYear());
 
-  useEffect(() => {
-    async function loadReport() {
-      try {
-        setLoading(true);
-        setReport(await getAdvancedReport(`${currentYear}-${mes}`));
-      } catch {
-        setReport(null);
-      } finally {
-        setLoading(false);
-      }
+  const loadReport = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      setReport(await getAdvancedReport(`${currentYear}-${mes}`));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo cargar el reporte avanzado.";
+      setReport(null);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
+  }, [currentYear, mes]);
 
-    loadReport();
-  }, [mes, currentYear]);
+  useEffect(() => {
+    void loadReport();
+  }, [loadReport]);
 
   function exportTeacherCsv() {
     if (!report) {
@@ -75,10 +81,22 @@ export default function ReportesPage() {
   }
 
   return (
-    <AppLayout>
+      <AppLayout>
       <PageHeader title="Reportes Avanzados" description="Consolidado mensual por turno, aula, maestros y alertas de inasistencia" />
 
       <div className="space-y-6">
+        {error && (
+          <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">No se pudieron cargar los reportes</p>
+              <p className="mt-1 text-sm">{error}</p>
+            </div>
+            <Button variant="outline" onClick={() => void loadReport()} className="self-start">
+              Reintentar
+            </Button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
           <div className="space-y-4 rounded-xl border border-border/50 bg-card p-6 shadow-sm">
             <h3 className="text-sm font-semibold text-foreground">Filtros y exportacion</h3>
@@ -180,9 +198,9 @@ export default function ReportesPage() {
               <Users className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-foreground">Resumen de maestros</h3>
             </div>
-            {report && report.teachers.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              {report && report.teachers.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
                   <thead>
                     <tr className="border-b border-border/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
                       <th className="px-3 py-3">Nombre</th>
@@ -205,6 +223,8 @@ export default function ReportesPage() {
                   </tbody>
                 </table>
               </div>
+            ) : error ? (
+              <p className="text-sm text-muted-foreground">Corrige el problema de carga para ver el resumen de maestros.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Sin datos de maestros para este mes.</p>
             )}
@@ -227,7 +247,7 @@ export default function ReportesPage() {
                   </p>
                 </div>
               ))}
-              {!loading && (report?.childrenAlerts.length || 0) === 0 && (
+              {!loading && !error && (report?.childrenAlerts.length || 0) === 0 && (
                 <p className="text-sm text-muted-foreground">No hay alertas de inasistencia para este mes.</p>
               )}
             </div>

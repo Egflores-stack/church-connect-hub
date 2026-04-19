@@ -1,4 +1,5 @@
 import { Component, ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -31,6 +32,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <p className="mt-2 text-sm text-muted-foreground">
               Ocurrio un error en el frontend. Recarga la pagina y revisa la consola del navegador para ver el detalle.
             </p>
+            <div className="mt-5 flex justify-center gap-3">
+              <Button type="button" onClick={() => window.location.reload()}>
+                Recargar pagina
+              </Button>
+            </div>
           </div>
         </div>
       );

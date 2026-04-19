@@ -5,7 +5,7 @@
   updateNino,
   deleteNino,
 } = require("../db");
-const { readJsonBody, sendJson, parseId } = require("../http");
+const { readJsonBody, sendJson, sendError, parseId } = require("../http");
 const { validateRequired, validateEnum, validateDate } = require("../middleware/validator");
 
 function normalizeTurno(turno) {
@@ -32,9 +32,15 @@ async function handleList(req, res) {
 
 async function handleGet(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleGetNino", resource: "/api/ninos/:id", parameter: "id", value: req.url });
+    return;
+  }
   const n = await getNinoById(id);
-  if (!n) { sendJson(res, 404, { error: "Nino no encontrado" }); return; }
+  if (!n) {
+    sendError(res, 404, "Nino no encontrado", { operation: "handleGetNino", resource: "/api/ninos/:id", parameter: "id", value: id });
+    return;
+  }
   sendJson(res, 200, n);
 }
 
@@ -42,25 +48,67 @@ async function handleCreate(req, res) {
   const payload = await readJsonBody(req);
   payload.turno = normalizeTurno(payload.turno);
   const required = validateRequired(payload, ["nombre", "fechaNacimiento", "grupo", "turno"]);
-  if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
-  if (!validateDate(payload.fechaNacimiento)) { sendJson(res, 400, { error: "Fecha de nacimiento invalida (YYYY-MM-DD)" }); return; }
+  if (!required.valid) {
+    sendError(res, 400, required.error, { operation: "handleCreateNino", resource: "/api/ninos", fields: required.fields });
+    return;
+  }
+  if (!validateDate(payload.fechaNacimiento)) {
+    sendError(res, 400, "Fecha de nacimiento invalida (YYYY-MM-DD)", {
+      operation: "handleCreateNino",
+      resource: "/api/ninos",
+      field: "fechaNacimiento",
+      value: payload.fechaNacimiento,
+    });
+    return;
+  }
   if (payload.estado && !validateEnum(payload.estado, ["activo", "inactivo"])) {
-    sendJson(res, 400, { error: "Estado debe ser 'activo' o 'inactivo'" }); return;
+    sendError(res, 400, "Estado debe ser 'activo' o 'inactivo'", {
+      operation: "handleCreateNino",
+      resource: "/api/ninos",
+      field: "estado",
+      value: payload.estado,
+    });
+    return;
   }
   sendJson(res, 201, await createNino(payload));
 }
 
 async function handleUpdate(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleUpdateNino", resource: "/api/ninos/:id", parameter: "id", value: req.url });
+    return;
+  }
   const n = await getNinoById(id);
-  if (!n) { sendJson(res, 404, { error: "Nino no encontrado" }); return; }
+  if (!n) {
+    sendError(res, 404, "Nino no encontrado", { operation: "handleUpdateNino", resource: "/api/ninos/:id", parameter: "id", value: id });
+    return;
+  }
 
   const payload = await readJsonBody(req);
   payload.turno = normalizeTurno(payload.turno);
   const required = validateRequired(payload, ["nombre", "fechaNacimiento", "grupo", "turno"]);
-  if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
-  if (!validateDate(payload.fechaNacimiento)) { sendJson(res, 400, { error: "Fecha de nacimiento invalida (YYYY-MM-DD)" }); return; }
+  if (!required.valid) {
+    sendError(res, 400, required.error, {
+      operation: "handleUpdateNino",
+      resource: "/api/ninos/:id",
+      parameter: "id",
+      value: id,
+      fields: required.fields,
+    });
+    return;
+  }
+  if (!validateDate(payload.fechaNacimiento)) {
+    sendError(res, 400, "Fecha de nacimiento invalida (YYYY-MM-DD)", {
+      operation: "handleUpdateNino",
+      resource: "/api/ninos/:id",
+      parameter: "id",
+      value: id,
+      field: "fechaNacimiento",
+      value: payload.fechaNacimiento,
+    });
+    return;
+  }
 
   // Recalculate birthday notifications if estado changed
   if (payload.estado && n.estado !== payload.estado) {
@@ -73,9 +121,15 @@ async function handleUpdate(req, res) {
 
 async function handleDelete(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleDeleteNino", resource: "/api/ninos/:id", parameter: "id", value: req.url });
+    return;
+  }
   const deleted = await deleteNino(id);
-  if (!deleted) { sendJson(res, 404, { error: "Nino no encontrado" }); return; }
+  if (!deleted) {
+    sendError(res, 404, "Nino no encontrado", { operation: "handleDeleteNino", resource: "/api/ninos/:id", parameter: "id", value: id });
+    return;
+  }
   sendJson(res, 200, { message: "Nino eliminado" });
 }
 

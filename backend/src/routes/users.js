@@ -5,7 +5,7 @@
   updateUser,
   deleteUser,
 } = require("../db");
-const { readJsonBody, sendJson, parseId } = require("../http");
+const { readJsonBody, sendJson, sendError, parseId } = require("../http");
 const { validateRequired, validateEmail, validatePassword } = require("../middleware/validator");
 const { recalculateAppBirthdayNotifications } = require("../reminders");
 
@@ -22,33 +22,86 @@ async function handleGetUsers(req, res, auth) {
 
 async function handleGetUser(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleGetUser", resource: "/api/users/:id", parameter: "id", value: req.url });
+    return;
+  }
 
   const user = await getUserById(id);
-  if (!user) { sendJson(res, 404, { error: "Usuario no encontrado" }); return; }
+  if (!user) {
+    sendError(res, 404, "Usuario no encontrado", { operation: "handleGetUser", resource: "/api/users/:id", parameter: "id", value: id });
+    return;
+  }
   sendJson(res, 200, user);
 }
 
 async function handleCreateUser(req, res) {
   const payload = await readJsonBody(req);
   const required = validateRequired(payload, ["nombre", "email", "password", "role"]);
-  if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
-  if (!validateEmail(payload.email)) { sendJson(res, 400, { error: "Correo invalido" }); return; }
-  if (!validatePassword(payload.password)) { sendJson(res, 400, { error: "Contrasena minimo 6 caracteres" }); return; }
+  if (!required.valid) {
+    sendError(res, 400, required.error, {
+      operation: "handleCreateUser",
+      resource: "/api/users",
+      fields: required.fields,
+    });
+    return;
+  }
+  if (!validateEmail(payload.email)) {
+    sendError(res, 400, "Correo invalido", {
+      operation: "handleCreateUser",
+      resource: "/api/users",
+      field: "email",
+      value: payload.email,
+    });
+    return;
+  }
+  if (!validatePassword(payload.password)) {
+    sendError(res, 400, "Contrasena minimo 6 caracteres", {
+      operation: "handleCreateUser",
+      resource: "/api/users",
+      field: "password",
+    });
+    return;
+  }
   sendJson(res, 201, await createUser(payload));
 }
 
 async function handleUpdateUser(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleUpdateUser", resource: "/api/users/:id", parameter: "id", value: req.url });
+    return;
+  }
 
   const user = await getUserById(id);
-  if (!user) { sendJson(res, 404, { error: "Usuario no encontrado" }); return; }
+  if (!user) {
+    sendError(res, 404, "Usuario no encontrado", { operation: "handleUpdateUser", resource: "/api/users/:id", parameter: "id", value: id });
+    return;
+  }
 
   const payload = await readJsonBody(req);
   const required = validateRequired(payload, ["nombre", "email", "role"]);
-  if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
-  if (!validateEmail(payload.email)) { sendJson(res, 400, { error: "Correo invalido" }); return; }
+  if (!required.valid) {
+    sendError(res, 400, required.error, {
+      operation: "handleUpdateUser",
+      resource: "/api/users/:id",
+      parameter: "id",
+      value: id,
+      fields: required.fields,
+    });
+    return;
+  }
+  if (!validateEmail(payload.email)) {
+    sendError(res, 400, "Correo invalido", {
+      operation: "handleUpdateUser",
+      resource: "/api/users/:id",
+      parameter: "id",
+      value: id,
+      field: "email",
+      value: payload.email,
+    });
+    return;
+  }
 
   const oldUser = await getUserById(id);
   const result = await updateUser(id, payload);
@@ -66,10 +119,16 @@ async function handleUpdateUser(req, res) {
 
 async function handleDeleteUser(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleDeleteUser", resource: "/api/users/:id", parameter: "id", value: req.url });
+    return;
+  }
 
   const deleted = await deleteUser(id);
-  if (!deleted) { sendJson(res, 404, { error: "Usuario no encontrado" }); return; }
+  if (!deleted) {
+    sendError(res, 404, "Usuario no encontrado", { operation: "handleDeleteUser", resource: "/api/users/:id", parameter: "id", value: id });
+    return;
+  }
 
   // Remove birthday notifications for deleted user
   const { query } = require("../db");

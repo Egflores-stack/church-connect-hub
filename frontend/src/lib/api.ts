@@ -34,23 +34,79 @@ function buildApiUrl(path: string) {
 
 class ApiError extends Error {
   status: number;
+  context: Record<string, unknown>;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, context: Record<string, unknown> = {}) {
     super(message);
     this.status = status;
+    this.context = context;
   }
+}
+
+function buildErrorContext(data: any) {
+  const source = data?.context && typeof data.context === "object" ? data.context : data;
+  const context: Record<string, unknown> = {};
+
+  for (const key of ["operation", "resource", "parameter", "value", "field", "detail"] as const) {
+    if (source?.[key] !== undefined && source?.[key] !== null && source?.[key] !== "") {
+      context[key] = source[key];
+    }
+  }
+
+  if (Array.isArray(source?.fields) && source.fields.length > 0) {
+    context.fields = source.fields.filter((field: unknown) => field !== undefined && field !== null && field !== "");
+  }
+
+  return context;
+}
+
+function formatErrorMessage(message: string, context: Record<string, unknown>) {
+  const fragments: string[] = [];
+
+  if (context.operation) {
+    fragments.push(`operacion ${String(context.operation)}`);
+  }
+  if (context.resource) {
+    fragments.push(`recurso ${String(context.resource)}`);
+  }
+  if (context.parameter) {
+    const value = context.value !== undefined ? `=${String(context.value)}` : "";
+    fragments.push(`parametro ${String(context.parameter)}${value}`);
+  }
+  if (context.field) {
+    fragments.push(`campo ${String(context.field)}`);
+  }
+  if (Array.isArray(context.fields) && context.fields.length > 0) {
+    fragments.push(`campos ${context.fields.map((field) => String(field)).join(", ")}`);
+  }
+  if (context.detail) {
+    fragments.push(`detalle ${String(context.detail)}`);
+  }
+
+  if (fragments.length === 0) {
+    return message;
+  }
+
+  return `${message} (${fragments.join(", ")})`;
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
-  const response = await fetch(buildApiUrl(path), {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(buildApiUrl(path), {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Error de red desconocido";
+    throw new ApiError(`No se pudo conectar con el servidor. ${detail}`, 0);
+  }
 
   const text = await response.text();
   let data: any = null;
@@ -67,11 +123,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     if (response.status === 401) {
       clearAuthSession();
     }
-    const message =
+    const baseMessage =
       typeof data === "string"
         ? data.slice(0, 160)
         : data?.error || "Error en la solicitud";
-    throw new ApiError(message, response.status);
+    const context = typeof data === "object" && data ? buildErrorContext(data) : {};
+    throw new ApiError(formatErrorMessage(baseMessage, context), response.status, context);
   }
 
   if (text && data === text) {

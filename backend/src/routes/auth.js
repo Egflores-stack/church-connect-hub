@@ -9,7 +9,7 @@ const {
   createSessionToken,
   isPasswordHashed,
 } = require("../auth");
-const { readJsonBody, sendJson } = require("../http");
+const { readJsonBody, sendJson, sendError } = require("../http");
 const { validateRequired, validateEmail, validatePassword } = require("../middleware/validator");
 
 async function handleLogin(req, res) {
@@ -17,23 +17,41 @@ async function handleLogin(req, res) {
 
   const required = validateRequired(payload, ["email", "password"]);
   if (!required.valid) {
-    sendJson(res, 400, { error: required.error, fields: required.fields });
+    sendError(res, 400, required.error, {
+      operation: "handleLogin",
+      resource: "/api/auth/login",
+      fields: required.fields,
+    });
     return;
   }
 
   if (!validateEmail(payload.email)) {
-    sendJson(res, 400, { error: "El formato del correo no es valido." });
+    sendError(res, 400, "El formato del correo no es valido.", {
+      operation: "handleLogin",
+      resource: "/api/auth/login",
+      field: "email",
+      value: payload.email,
+    });
     return;
   }
 
   if (!validatePassword(payload.password)) {
-    sendJson(res, 400, { error: "La contrasena debe tener al menos 6 caracteres." });
+    sendError(res, 400, "La contrasena debe tener al menos 6 caracteres.", {
+      operation: "handleLogin",
+      resource: "/api/auth/login",
+      field: "password",
+    });
     return;
   }
 
   const user = await findUserByEmail(payload.email);
   if (!user || user.estado === "inactivo" || !verifyPassword(payload.password, user.password)) {
-    sendJson(res, 401, { error: "Credenciales invalidas" });
+    sendError(res, 401, "Credenciales invalidas", {
+      operation: "handleLogin",
+      resource: "/api/auth/login",
+      field: "email",
+      value: payload.email,
+    });
     return;
   }
 

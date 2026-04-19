@@ -1,4 +1,6 @@
-﻿/**
+const { sendError } = require("../http");
+
+/**
  * Simple in-memory rate limiter.
  *
  * RATE_LIMIT_MAX  — max requests per window (default 20)
@@ -25,8 +27,11 @@ function rateLimit(req, res, next) {
   res.setHeader("X-RateLimit-Remaining", Math.max(0, RATE_LIMIT_MAX - entry.count));
 
   if (entry.count > RATE_LIMIT_MAX) {
-    res.writeHead(429, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo mas tarde." }));
+    sendError(res, 429, "Demasiadas solicitudes. Intenta de nuevo mas tarde.", {
+      operation: "rateLimit",
+      resource: req.url,
+      code: "RATE_LIMIT_EXCEEDED",
+    });
     return;
   }
 

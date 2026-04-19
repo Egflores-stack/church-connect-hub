@@ -12,12 +12,12 @@ const {
 const { getCatalogSettings, updateCatalogSettings } = require("./catalogs");
 const { buildRolePermissions, getPermissionsForRole } = require("./permissions");
 const { verifySessionToken, getBearerToken } = require("./auth");
-const { sendJson } = require("./http");
+const { sendJson, sendError } = require("./http");
 
 // Middleware
 const { buildCorsMiddleware } = require("./middleware/cors");
 const { rateLimit } = require("./middleware/rateLimit");
-const { logger, getSanitizedError } = require("./middleware/logger");
+const { logger, isProduction } = require("./middleware/logger");
 
 // Routes
 const { handleLogin } = require("./routes/auth");
@@ -31,29 +31,66 @@ const { handleListAttendances, handleSaveAttendance, handleListTeacherAttendance
 async function authenticateRequest(req, res) {
   const token = getBearerToken(req);
   const session = verifySessionToken(token);
-  if (!session) { sendJson(res, 401, { error: "Sesion invalida o expirada." }); return null; }
+  if (!session) {
+    sendError(res, 401, "Sesion invalida o expirada.", {
+      operation: "authenticateRequest",
+      resource: new URL(req.url, `http://${req.headers.host}`).pathname,
+    });
+    return null;
+  }
 
   const { findUserById } = require("./db");
   const user = await findUserById(session.sub);
-  if (!user || user.estado === "inactivo") { sendJson(res, 401, { error: "Usuario no autorizado." }); return null; }
+  if (!user || user.estado === "inactivo") {
+    sendError(res, 401, "Usuario no autorizado.", {
+      operation: "authenticateRequest",
+      resource: new URL(req.url, `http://${req.headers.host}`).pathname,
+      parameter: "session.sub",
+      value: session.sub,
+    });
+    return null;
+  }
 
   return { session, user, permissions: getPermissionsForRole(user.role).permissions };
 }
 
 function hasPermission(auth, permission) { return auth.permissions.includes(permission); }
 
+function getRequestResource(req) {
+  return new URL(req.url, `http://${req.headers.host}`).pathname;
+}
+
 async function requirePermission(req, res, permission) {
   const auth = await authenticateRequest(req, res);
   if (!auth) return null;
-  if (!hasPermission(auth, permission)) { sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." }); return null; }
+  if (!hasPermission(auth, permission)) {
+    sendError(res, 403, "No tienes permiso para realizar esta accion.", {
+      operation: "requirePermission",
+      resource: getRequestResource(req),
+      parameter: "permission",
+      value: permission,
+    });
+    return null;
+  }
   return auth;
 }
 
 async function requireAnyPermission(req, res, permissions) {
   const auth = await authenticateRequest(req, res);
   if (!auth) return null;
-  if (!permissions.some((p) => hasPermission(auth, p))) { sendJson(res, 403, { error: "No tienes permiso para realizar esta accion." }); return null; }
+  if (!permissions.some((p) => hasPermission(auth, p))) {
+    sendError(res, 403, "No tienes permiso para realizar esta accion.", {
+      operation: "requireAnyPermission",
+      resource: getRequestResource(req),
+      fields: permissions,
+    });
+    return null;
+  }
   return auth;
+}
+
+function isValidMonth(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
 }
 
 // ── Router ────────────────────────────────────────────────
@@ -248,14 +285,58 @@ const server = http.createServer(async (req, res) => {
       const auth = await requirePermission(req, res, "reports.view");
       if (!auth) return;
       const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
-      sendJson(res, 200, await getAttendanceReport(month));
+      if (!isValidMonth(month)) {
+        sendError(res, 400, "Parametro month invalido. Se espera el formato YYYY-MM.", {
+          operation: "getAttendanceReport",
+          resource: "/api/reportes/asistencia",
+          parameter: "month",
+          value: month,
+        });
+        return;
+      }
+
+      try {
+        sendJson(res, 200, await getAttendanceReport(month));
+      } catch (error) {
+        console.error("[reportes/asistencia]", error);
+        sendError(res, 500, "Error al generar el reporte de asistencia.", {
+          operation: "getAttendanceReport",
+          resource: "/api/reportes/asistencia",
+          parameter: "month",
+          value: month,
+          code: error.code,
+          detail: isProduction ? undefined : error.message,
+        });
+      }
       return;
     }
     if (pathname === "/api/reportes/avanzados" && req.method === "GET") {
       const auth = await requirePermission(req, res, "reports.view");
       if (!auth) return;
       const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
-      sendJson(res, 200, await getAdvancedReports(month));
+      if (!isValidMonth(month)) {
+        sendError(res, 400, "Parametro month invalido. Se espera el formato YYYY-MM.", {
+          operation: "getAdvancedReports",
+          resource: "/api/reportes/avanzados",
+          parameter: "month",
+          value: month,
+        });
+        return;
+      }
+
+      try {
+        sendJson(res, 200, await getAdvancedReports(month));
+      } catch (error) {
+        console.error("[reportes/avanzados]", error);
+        sendError(res, 500, "Error al generar el reporte avanzado.", {
+          operation: "getAdvancedReports",
+          resource: "/api/reportes/avanzados",
+          parameter: "month",
+          value: month,
+          code: error.code,
+          detail: isProduction ? undefined : error.message,
+        });
+      }
       return;
     }
 
@@ -323,18 +404,33 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 404
-    sendJson(res, 404, { error: "Ruta no encontrada" });
+    sendError(res, 404, "Ruta no encontrada", {
+      operation: "routeMatch",
+      resource: pathname,
+    });
   } catch (error) {
     if (error instanceof SyntaxError) {
-      sendJson(res, 400, { error: "JSON invalido" });
+      sendError(res, 400, "JSON invalido", {
+        operation: "readJsonBody",
+        resource: pathname,
+      });
       return;
     }
     if (error.code === "23505") {
-      sendJson(res, 409, { error: "Ya existe un registro con ese valor unico" });
+      sendError(res, 409, "Ya existe un registro con ese valor unico", {
+        operation: "databaseWrite",
+        resource: pathname,
+        code: "23505",
+      });
       return;
     }
     console.error("[ERROR]", error);
-    sendJson(res, 500, getSanitizedError(error));
+    sendError(res, 500, "Error interno del servidor", {
+      operation: "requestHandler",
+      resource: pathname,
+      code: error.code,
+      detail: isProduction ? undefined : error.message,
+    });
   }
 });
 

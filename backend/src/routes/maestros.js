@@ -5,7 +5,7 @@
   updateMaestro,
   deleteMaestro,
 } = require("../db");
-const { readJsonBody, sendJson, parseId } = require("../http");
+const { readJsonBody, sendJson, sendError, parseId } = require("../http");
 const { validateRequired, validateEnum } = require("../middleware/validator");
 
 function normalizeTurno(turno) {
@@ -32,9 +32,15 @@ async function handleList(req, res) {
 
 async function handleGet(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleGetMaestro", resource: "/api/maestros/:id", parameter: "id", value: req.url });
+    return;
+  }
   const m = await getMaestroById(id);
-  if (!m) { sendJson(res, 404, { error: "Maestro no encontrado" }); return; }
+  if (!m) {
+    sendError(res, 404, "Maestro no encontrado", { operation: "handleGetMaestro", resource: "/api/maestros/:id", parameter: "id", value: id });
+    return;
+  }
   sendJson(res, 200, m);
 }
 
@@ -42,25 +48,58 @@ async function handleCreate(req, res) {
   const payload = await readJsonBody(req);
   payload.turno = normalizeTurno(payload.turno);
   const required = validateRequired(payload, ["nombre", "turno"]);
-  if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
+  if (!required.valid) {
+    sendError(res, 400, required.error, { operation: "handleCreateMaestro", resource: "/api/maestros", fields: required.fields });
+    return;
+  }
   if (payload.estado && !validateEnum(payload.estado, ["activo", "inactivo"])) {
-    sendJson(res, 400, { error: "Estado debe ser 'activo' o 'inactivo'" }); return;
+    sendError(res, 400, "Estado debe ser 'activo' o 'inactivo'", {
+      operation: "handleCreateMaestro",
+      resource: "/api/maestros",
+      field: "estado",
+      value: payload.estado,
+    });
+    return;
   }
   sendJson(res, 201, await createMaestro(payload));
 }
 
 async function handleUpdate(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleUpdateMaestro", resource: "/api/maestros/:id", parameter: "id", value: req.url });
+    return;
+  }
   const m = await getMaestroById(id);
-  if (!m) { sendJson(res, 404, { error: "Maestro no encontrado" }); return; }
+  if (!m) {
+    sendError(res, 404, "Maestro no encontrado", { operation: "handleUpdateMaestro", resource: "/api/maestros/:id", parameter: "id", value: id });
+    return;
+  }
 
   const payload = await readJsonBody(req);
   payload.turno = normalizeTurno(payload.turno);
   const required = validateRequired(payload, ["nombre", "turno"]);
-  if (!required.valid) { sendJson(res, 400, { error: required.error, fields: required.fields }); return; }
+  if (!required.valid) {
+    sendError(res, 400, required.error, {
+      operation: "handleUpdateMaestro",
+      resource: "/api/maestros/:id",
+      parameter: "id",
+      value: id,
+      fields: required.fields,
+    });
+    return;
+  }
   if (payload.estado && !validateEnum(payload.estado, ["activo", "inactivo"])) {
-    sendJson(res, 400, { error: "Estado debe ser 'activo' o 'inactivo'" }); return; }
+    sendError(res, 400, "Estado debe ser 'activo' o 'inactivo'", {
+      operation: "handleUpdateMaestro",
+      resource: "/api/maestros/:id",
+      parameter: "id",
+      value: id,
+      field: "estado",
+      value: payload.estado,
+    });
+    return;
+  }
 
   // Recalculate birthday notifications if estado or fechaCumpleanos changed
   if (
@@ -76,9 +115,15 @@ async function handleUpdate(req, res) {
 
 async function handleDelete(req, res) {
   const id = parseId(req.url);
-  if (!id) { sendJson(res, 400, { error: "Id invalido" }); return; }
+  if (!id) {
+    sendError(res, 400, "Id invalido", { operation: "handleDeleteMaestro", resource: "/api/maestros/:id", parameter: "id", value: req.url });
+    return;
+  }
   const deleted = await deleteMaestro(id);
-  if (!deleted) { sendJson(res, 404, { error: "Maestro no encontrado" }); return; }
+  if (!deleted) {
+    sendError(res, 404, "Maestro no encontrado", { operation: "handleDeleteMaestro", resource: "/api/maestros/:id", parameter: "id", value: id });
+    return;
+  }
 
   // Remove birthday notifications for deleted maestro
   const { query } = require("../db");
