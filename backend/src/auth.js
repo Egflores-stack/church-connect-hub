@@ -9,17 +9,11 @@ const HASH_DIGEST = "sha512";
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 
 function toBase64Url(input) {
-  return Buffer.from(input)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  return Buffer.from(input).toString("base64url");
 }
 
 function fromBase64Url(input) {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-  return Buffer.from(normalized + padding, "base64").toString("utf8");
+  return Buffer.from(input, "base64url").toString("utf8");
 }
 
 function createPasswordHash(password) {
@@ -88,20 +82,26 @@ function verifySessionToken(token) {
     return null;
   }
 
-  const [encodedPayload, signature] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [encodedPayload, signature] = parts;
   if (!encodedPayload || !signature) {
     return null;
   }
 
   const expectedSignature = crypto.createHmac("sha256", AUTH_SECRET).update(encodedPayload).digest("base64url");
-  const providedBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expectedSignature);
-
-  if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
-    return null;
-  }
 
   try {
+    const providedBuffer = Buffer.from(signature, "base64url");
+    const expectedBuffer = Buffer.from(expectedSignature, "base64url");
+
+    if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
+      return null;
+    }
+
     const payload = JSON.parse(fromBase64Url(encodedPayload));
     if (!payload.exp || payload.exp < Date.now()) {
       return null;
