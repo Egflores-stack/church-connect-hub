@@ -283,7 +283,9 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (user.password === payload.password) {
-        await updateUserPassword(user.id, createPasswordHash(payload.password));
+        const hashedPassword = createPasswordHash(payload.password);
+        await updateUserPassword(user.id, hashedPassword);
+        user.password = hashedPassword;
       }
 
       const safeUser = sanitizeUser(user);
