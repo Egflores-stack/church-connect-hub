@@ -7,7 +7,7 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
     "install:frontend": "cd frontend && npm install",
-    "build": "cd frontend && npm install && npm run build -- --outDir ../public --emptyOutDir",
+    "build": "cd frontend && npm install && npm run build",
     "build:frontend": "npm --prefix frontend run build",
     "test": "npm --prefix frontend run test",
     "lint": "npm --prefix frontend run lint"
