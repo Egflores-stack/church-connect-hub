@@ -6,7 +6,8 @@
     "dev": "npm --prefix frontend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
-    "build": "npm --prefix frontend run build",
+    "install:frontend": "npm install --prefix frontend",
+    "build": "npm install --prefix frontend && npm run build --prefix frontend",
     "build:frontend": "npm --prefix frontend run build",
     "test": "npm --prefix frontend run test",
     "lint": "npm --prefix frontend run lint"
