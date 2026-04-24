@@ -2,6 +2,7 @@
   "name": "church-connect-hub",
   "private": true,
   "version": "1.0.0",
+  "main": "index.js",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
@@ -9,7 +10,7 @@
     "install:frontend": "npm install --prefix frontend",
     "build": "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix backend",
     "build:frontend": "npm --prefix frontend run build",
-    "start": "npm --prefix backend start",
+    "start": "node index.js",
     "test": "npm --prefix frontend run test",
     "lint": "npm --prefix frontend run lint"
   }
